@@ -1,0 +1,271 @@
+{
+  "description": "COT contract configuration. Set 'enabled' to false to exclude a contract from all processing.",
+  "contracts": [
+    {
+      "cftc_name": "GOLD - COMMODITY EXCHANGE INC.",
+      "display_name": "GOLD",
+      "category": "metals",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "SILVER - COMMODITY EXCHANGE INC.",
+      "display_name": "SILVER",
+      "category": "metals",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "COPPER- #1 - COMMODITY EXCHANGE INC.",
+      "display_name": "COPPER",
+      "category": "metals",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "PLATINUM - NEW YORK MERCANTILE EXCHANGE",
+      "display_name": "PLATINUM",
+      "category": "metals",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "PALLADIUM - NEW YORK MERCANTILE EXCHANGE",
+      "display_name": "PALLADIUM",
+      "category": "metals",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "WTI-PHYSICAL - NEW YORK MERCANTILE EXCHANGE",
+      "display_name": "CRUDE OIL",
+      "category": "energy",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "HENRY HUB - NEW YORK MERCANTILE EXCHANGE",
+      "display_name": "NATURAL GAS",
+      "category": "energy",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "GASOLINE RBOB - NEW YORK MERCANTILE EXCHANGE",
+      "display_name": "GASOLINE",
+      "category": "energy",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "NY HARBOR ULSD - NEW YORK MERCANTILE EXCHANGE",
+      "display_name": "HEATING OIL",
+      "category": "energy",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "E-MINI S&P 500 - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "S&P 500",
+      "category": "indices",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "NASDAQ MINI - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "NASDAQ 100",
+      "category": "indices",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "DJIA x $5 - CHICAGO BOARD OF TRADE",
+      "display_name": "DOW JONES",
+      "category": "indices",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "RUSSELL E-MINI - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "RUSSELL 2000",
+      "category": "indices",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "VIX FUTURES - CBOE FUTURES EXCHANGE",
+      "display_name": "VIX",
+      "category": "indices",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "UST BOND - CHICAGO BOARD OF TRADE",
+      "display_name": "T-BONDS",
+      "category": "fixed_income",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "UST 10Y NOTE - CHICAGO BOARD OF TRADE",
+      "display_name": "10Y NOTES",
+      "category": "fixed_income",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "UST 2Y NOTE - CHICAGO BOARD OF TRADE",
+      "display_name": "2Y NOTES",
+      "category": "fixed_income",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "UST 5Y NOTE - CHICAGO BOARD OF TRADE",
+      "display_name": "5Y NOTES",
+      "category": "fixed_income",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "EURO FX - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "EUR/USD",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "USD/JPY",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "BRITISH POUND - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "GBP/USD",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "USD/CHF",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "USD/CAD",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "AUD/USD",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "NZ DOLLAR - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "NZD/USD",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "MEXICAN PESO - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "USD/MXN",
+      "category": "currencies",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "CORN - CHICAGO BOARD OF TRADE",
+      "display_name": "CORN",
+      "category": "grains",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "SOYBEANS - CHICAGO BOARD OF TRADE",
+      "display_name": "SOYBEANS",
+      "category": "grains",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "WHEAT-SRW - CHICAGO BOARD OF TRADE",
+      "display_name": "WHEAT",
+      "category": "grains",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "SOYBEAN OIL - CHICAGO BOARD OF TRADE",
+      "display_name": "SOYBEAN OIL",
+      "category": "grains",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "SOYBEAN MEAL - CHICAGO BOARD OF TRADE",
+      "display_name": "SOYBEAN MEAL",
+      "category": "grains",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "COFFEE C - ICE FUTURES U.S.",
+      "display_name": "COFFEE",
+      "category": "softs",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "SUGAR NO. 11 - ICE FUTURES U.S.",
+      "display_name": "SUGAR",
+      "category": "softs",
+      "enabled": true,
+      "key_market": true
+    },
+    {
+      "cftc_name": "COCOA - ICE FUTURES U.S.",
+      "display_name": "COCOA",
+      "category": "softs",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "COTTON NO. 2 - ICE FUTURES U.S.",
+      "display_name": "COTTON",
+      "category": "softs",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "LIVE CATTLE - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "LIVE CATTLE",
+      "category": "meats",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "LEAN HOGS - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "LEAN HOGS",
+      "category": "meats",
+      "enabled": true,
+      "key_market": false
+    },
+    {
+      "cftc_name": "FEEDER CATTLE - CHICAGO MERCANTILE EXCHANGE",
+      "display_name": "FEEDER CATTLE",
+      "category": "meats",
+      "enabled": true,
+      "key_market": false
+    }
+  ]
+}

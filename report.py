@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from src.config import Config
+from src.config import Config, get_key_markets
 from src.fetcher import COTFetcher
 from src.parser import COTParser
 from src.analyzer import COTAnalyzer
@@ -150,13 +150,8 @@ def generate_report():
     print("KEY MARKETS WATCHLIST")
     print("=" * 70)
 
-    key_markets = [
-        "GOLD", "SILVER", "COPPER", "CRUDE OIL, LIGHT SWEET", "NATURAL GAS",
-        "E-MINI S&P 500 STOCK INDEX", "NASDAQ-100 STOCK INDEX (MINI)",
-        "EURO FX", "JAPANESE YEN", "BRITISH POUND",
-        "CORN", "SOYBEANS", "WHEAT", "COFFEE C", "SUGAR NO. 11",
-        "10-YEAR U.S. TREASURY NOTES", "U.S. TREASURY BONDS"
-    ]
+    # Load key markets from contracts.json (markets with key_market: true)
+    key_markets = get_key_markets()
 
     print(f"{'Market':<35} {'Comm Net':>10} {'Spec Net':>10} {'Div %ile':>10} {'Signal':>12}")
     print("-" * 70)

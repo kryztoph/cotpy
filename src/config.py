@@ -1,9 +1,46 @@
 """Configuration settings for COT data analysis."""
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Optional
+
+
+def load_contracts_config(config_path: Path = None) -> dict:
+    """Load contracts configuration from JSON file."""
+    if config_path is None:
+        config_path = Path(__file__).parent.parent / "contracts.json"
+
+    if not config_path.exists():
+        return {"contracts": []}
+
+    with open(config_path) as f:
+        return json.load(f)
+
+
+def get_enabled_contracts(config_path: Path = None) -> list[dict]:
+    """Get list of enabled contracts."""
+    data = load_contracts_config(config_path)
+    return [c for c in data.get("contracts", []) if c.get("enabled", True)]
+
+
+def get_contract_name_mapping(config_path: Path = None) -> dict[str, str]:
+    """Get mapping of CFTC names to display names for enabled contracts."""
+    contracts = get_enabled_contracts(config_path)
+    return {c["cftc_name"]: c["display_name"] for c in contracts}
+
+
+def get_enabled_display_names(config_path: Path = None) -> list[str]:
+    """Get list of enabled display names for filtering."""
+    contracts = get_enabled_contracts(config_path)
+    return [c["display_name"] for c in contracts]
+
+
+def get_key_markets(config_path: Path = None) -> list[str]:
+    """Get list of key market display names for watchlist."""
+    contracts = get_enabled_contracts(config_path)
+    return [c["display_name"] for c in contracts if c.get("key_market", False)]
 
 
 @dataclass

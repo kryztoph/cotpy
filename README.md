@@ -143,6 +143,61 @@ Report saved to `output/trade_setup_report.txt`
 - **Divergence**: Commercial Net % - Small Spec Net %
 - **Percentile**: Historical ranking of current reading (0-100)
 
+## Contract Configuration
+
+The `contracts.json` file controls which markets are tracked and analyzed. Each contract has:
+
+| Field | Description |
+|-------|-------------|
+| `cftc_name` | Exact name from CFTC data (must match exactly) |
+| `display_name` | Friendly name shown in reports |
+| `category` | Grouping (metals, energy, indices, fixed_income, currencies, grains, softs, meats) |
+| `enabled` | Set to `false` to exclude from all processing |
+| `key_market` | Set to `true` to include in key markets watchlist |
+
+### Disabling a Contract
+
+To stop tracking a contract, edit `contracts.json` and set `"enabled": false`:
+
+```json
+{
+  "cftc_name": "COCOA - ICE FUTURES U.S.",
+  "display_name": "COCOA",
+  "category": "softs",
+  "enabled": false,
+  "key_market": false
+}
+```
+
+The disabled contract will be excluded from:
+- Data parsing and analysis
+- Signal generation
+- All reports and charts
+
+### Adding a New Contract
+
+1. Run `python main.py --update` to download latest data
+2. Check available CFTC names in the data files (`data/legacy_*.txt`)
+3. Add entry to `contracts.json` with exact `cftc_name` match
+
+## Position Summary Report
+
+Generate a comprehensive summary of all positions:
+
+```bash
+python summary_report.py
+```
+
+Output:
+- `output/position_summary.txt` - Formatted text report
+- `output/position_summary.csv` - Full data export
+
+The report shows:
+- All enabled contracts grouped by category
+- Open interest, net positions, and percentages
+- Divergence percentile and signal strength
+- Strong bullish/bearish actionable signals
+
 ## Configuration
 
 Edit `src/config.py` to customize:
@@ -172,7 +227,7 @@ Data is released every Friday by the CFTC (as of Tuesday's positions).
 ```
 cotpy/
 ├── src/
-│   ├── config.py      # Configuration settings
+│   ├── config.py      # Configuration settings & contract loader
 │   ├── fetcher.py     # Download COT data from CFTC
 │   ├── parser.py      # Parse CSV files into DataFrames
 │   ├── analyzer.py    # Calculate ratios & divergences
@@ -180,6 +235,9 @@ cotpy/
 │   └── visualizer.py  # Matplotlib & Plotly charts
 ├── data/              # Downloaded COT data files
 ├── output/            # Generated CSVs and charts
+├── contracts.json     # Contract configuration (enable/disable markets)
 ├── main.py            # CLI entry point
+├── report.py          # Trade setup report generator
+├── summary_report.py  # Position summary report generator
 └── requirements.txt
 ```

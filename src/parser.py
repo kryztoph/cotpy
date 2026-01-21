@@ -5,7 +5,7 @@ from typing import Optional
 
 import pandas as pd
 
-from .config import Config, default_config
+from .config import Config, default_config, get_contract_name_mapping, get_enabled_display_names
 
 
 class COTParser:
@@ -133,7 +133,12 @@ class COTParser:
         start_date = self.config.historical_start_date
         combined = combined[combined["date"] >= start_date]
 
-        # Filter by markets if configured
+        # Filter to only enabled contracts from contracts.json
+        enabled_names = get_enabled_display_names()
+        if enabled_names:
+            combined = combined[combined["market"].isin(enabled_names)]
+
+        # Filter by additional markets if configured
         if self.config.markets_filter:
             combined = combined[combined["market"].isin(self.config.markets_filter)]
 
@@ -168,7 +173,12 @@ class COTParser:
         start_date = self.config.historical_start_date
         combined = combined[combined["date"] >= start_date]
 
-        # Filter by markets if configured
+        # Filter to only enabled contracts from contracts.json
+        enabled_names = get_enabled_display_names()
+        if enabled_names:
+            combined = combined[combined["market"].isin(enabled_names)]
+
+        # Filter by additional markets if configured
         if self.config.markets_filter:
             combined = combined[combined["market"].isin(self.config.markets_filter)]
 
@@ -176,7 +186,7 @@ class COTParser:
 
     def _normalize_market_name(self, name: str) -> str:
         """
-        Normalize market names for consistency.
+        Normalize market names for consistency using contracts.json config.
 
         Args:
             name: Raw market name from CFTC data
@@ -187,37 +197,8 @@ class COTParser:
         if not isinstance(name, str):
             return str(name)
 
-        # Remove exchange suffix and clean up
-        name = name.split(" - ")[0].strip()
-
-        # Common normalizations
-        replacements = {
-            "GOLD - COMMODITY EXCHANGE INC.": "GOLD",
-            "SILVER - COMMODITY EXCHANGE INC.": "SILVER",
-            "COPPER-GRADE #1 - COMMODITY EXCHANGE INC.": "COPPER",
-            "CRUDE OIL, LIGHT SWEET - NEW YORK MERCANTILE EXCHANGE": "CRUDE OIL",
-            "NATURAL GAS - NEW YORK MERCANTILE EXCHANGE": "NATURAL GAS",
-            "E-MINI S&P 500 STOCK INDEX - CHICAGO MERCANTILE EXCHANGE": "S&P 500",
-            "NASDAQ-100 STOCK INDEX (MINI) - CHICAGO MERCANTILE EXCHANGE": "NASDAQ 100",
-            "DJIA x $5 - CHICAGO BOARD OF TRADE": "DOW JONES",
-            "U.S. TREASURY BONDS - CHICAGO BOARD OF TRADE": "T-BONDS",
-            "10-YEAR U.S. TREASURY NOTES - CHICAGO BOARD OF TRADE": "10Y NOTES",
-            "2-YEAR U.S. TREASURY NOTES - CHICAGO BOARD OF TRADE": "2Y NOTES",
-            "5-YEAR U.S. TREASURY NOTES - CHICAGO BOARD OF TRADE": "5Y NOTES",
-            "EURO FX - CHICAGO MERCANTILE EXCHANGE": "EUR/USD",
-            "JAPANESE YEN - CHICAGO MERCANTILE EXCHANGE": "USD/JPY",
-            "BRITISH POUND STERLING - CHICAGO MERCANTILE EXCHANGE": "GBP/USD",
-            "SWISS FRANC - CHICAGO MERCANTILE EXCHANGE": "USD/CHF",
-            "CANADIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE": "USD/CAD",
-            "AUSTRALIAN DOLLAR - CHICAGO MERCANTILE EXCHANGE": "AUD/USD",
-            "CORN - CHICAGO BOARD OF TRADE": "CORN",
-            "SOYBEANS - CHICAGO BOARD OF TRADE": "SOYBEANS",
-            "WHEAT-SRW - CHICAGO BOARD OF TRADE": "WHEAT",
-            "COFFEE C - ICE FUTURES U.S.": "COFFEE",
-            "SUGAR NO. 11 - ICE FUTURES U.S.": "SUGAR",
-            "COCOA - ICE FUTURES U.S.": "COCOA",
-            "COTTON NO. 2 - ICE FUTURES U.S.": "COTTON",
-        }
+        # Load name mapping from contracts.json (only enabled contracts)
+        replacements = get_contract_name_mapping()
 
         return replacements.get(name, name)
 
