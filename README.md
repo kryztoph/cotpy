@@ -18,6 +18,9 @@ pip install -r requirements.txt
 ```bash
 # Download data and run full analysis
 python main.py --all
+
+# Generate trade setup report
+python report.py
 ```
 
 ## CLI Commands
@@ -104,6 +107,21 @@ python main.py --chart "SILVER"
 ```
 
 Use `--list-markets` to see all available market names.
+
+## Trade Setup Report
+
+Generate a focused report of markets showing extreme divergences:
+
+```bash
+python report.py
+```
+
+Output includes:
+- **Strong Bullish Setups**: Commercials heavily long, small specs heavily short
+- **Strong Bearish Setups**: Commercials heavily short, small specs heavily long
+- **Key Markets Watchlist**: Major commodities, currencies, and indices with current readings
+
+Report saved to `output/trade_setup_report.txt`
 
 ## Signal Logic
 
