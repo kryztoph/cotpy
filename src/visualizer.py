@@ -439,6 +439,7 @@ class COTVisualizer:
         fig = make_subplots(
             rows=2,
             cols=2,
+            column_widths=[0.7, 0.3],
             specs=[
                 [{"type": "scatter"}, {"type": "bar"}],
                 [{"type": "table", "colspan": 2}, None],
@@ -449,8 +450,8 @@ class COTVisualizer:
                 "Signal Details",
             ),
             vertical_spacing=0.15,
-            horizontal_spacing=0.1,
-            row_heights=[0.55, 0.45],
+            horizontal_spacing=0.08,
+            row_heights=[0.6, 0.4],
         )
 
         # Scatter plot of positioning
@@ -464,7 +465,13 @@ class COTVisualizer:
                     color=latest["divergence_percentile"],
                     colorscale="RdYlGn",
                     showscale=True,
-                    colorbar=dict(title="Div %ile", x=0.45),
+                    colorbar=dict(
+                        title="Div %ile",
+                        x=1.02,
+                        thickness=15,
+                        len=0.5,
+                        y=0.75
+                    ),
                 ),
                 text=latest["market"],
                 hovertemplate="<b>%{text}</b><br>Comm: %{x:.1f}%<br>Spec: %{y:.1f}%<extra></extra>",
@@ -509,7 +516,7 @@ class COTVisualizer:
                         ],
                         fill_color=[
                             [
-                                "lightgreen" if s == "BULLISH" else "lightcoral"
+                                "rgba(144, 238, 144, 0.3)" if s == "BULLISH" else "rgba(240, 128, 128, 0.3)"
                                 for s in table_df["signal"]
                             ]
                         ]
@@ -523,7 +530,7 @@ class COTVisualizer:
 
         fig.update_layout(
             title="COT Analysis Dashboard",
-            height=900,
+            height=1100,
             showlegend=False,
         )
 
