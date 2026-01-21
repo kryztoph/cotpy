@@ -76,6 +76,35 @@ python main.py --list-markets
 | `output/charts/*.html` | Interactive Plotly charts |
 | `output/charts/*.png` | Static Matplotlib charts |
 
+## Viewing Charts
+
+Open interactive charts in your browser:
+
+```bash
+# Open the main dashboard (overview of all markets)
+open output/charts/dashboard.html
+
+# Open a specific market chart
+open output/charts/GOLD_interactive.html
+```
+
+Generate charts for specific markets:
+
+```bash
+# Interactive HTML charts (recommended)
+python main.py --chart "GOLD" --interactive
+python main.py --chart "CRUDE OIL, LIGHT SWEET" --interactive
+python main.py --chart "E-MINI S&P 500 STOCK INDEX" --interactive
+python main.py --chart "CORN" --interactive
+python main.py --chart "EURO FX" --interactive
+
+# Static PNG charts
+python main.py --chart "GOLD"
+python main.py --chart "SILVER"
+```
+
+Use `--list-markets` to see all available market names.
+
 ## Signal Logic
 
 **Bullish Signal**: Commercials heavily net long + Small speculators heavily net short
