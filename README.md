@@ -123,6 +123,33 @@ Output includes:
 
 Report saved to `output/trade_setup_report.txt`
 
+## Weekly Automation
+
+This repo includes a macOS LaunchAgent that refreshes CFTC data and regenerates
+all outputs every Saturday at 7:00 AM local time:
+
+```bash
+cp launchd/com.fox.cotpy.weekly.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.fox.cotpy.weekly.plist
+```
+
+The scheduled job runs:
+
+```bash
+scripts/run_cotpy_weekly.sh
+```
+
+The runner uses `main.py --update --force`, verifies the current-year COT files
+were actually refreshed, then regenerates analysis, signals, CSV exports,
+dashboard, trade setup report, and position summary. Logs are written to
+`logs/weekly.log`.
+
+Check status:
+
+```bash
+launchctl print "gui/$(id -u)/com.fox.cotpy.weekly"
+```
+
 ## Signal Logic
 
 **Bullish Signal**: Commercials heavily net long + Small speculators heavily net short

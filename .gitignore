@@ -6,6 +6,8 @@ env/
 # Data and output (large/generated files)
 data/
 output/
+logs/
+.cache/
 
 # Python
 __pycache__/
