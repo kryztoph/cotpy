@@ -79,6 +79,11 @@ def generate_report():
     print(f"  Moderate Bearish Setups: {mod_bear:3}")
     print()
 
+    strong_bullish = []
+    mod_bullish = []
+    strong_bearish = []
+    mod_bearish = []
+
     # Bullish setups
     print("=" * 70)
     print("BULLISH SETUPS (Commercials Long / Small Specs Short)")

@@ -232,7 +232,7 @@ def cmd_chart(config: Config, market: str, interactive: bool = False):
     visualizer = COTVisualizer(config)
 
     if interactive:
-        chart_path = config.charts_dir / f"{market.replace('/', '_')}_interactive.html"
+        chart_path = config.charts_dir / visualizer._interactive_chart_filename(market)
         visualizer.plot_interactive_positions(df, market, save_path=chart_path)
         print(f"Open {chart_path} in your browser")
     else:

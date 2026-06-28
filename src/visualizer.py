@@ -2,6 +2,7 @@
 
 from pathlib import Path
 from typing import Optional
+from html import escape
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -10,7 +11,7 @@ import seaborn as sns
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from .config import Config, default_config
+from .config import Config, default_config, get_enabled_contracts, get_key_markets
 
 
 class COTVisualizer:
@@ -415,6 +416,76 @@ class COTVisualizer:
 
         return fig
 
+    def _interactive_chart_filename(self, market: str) -> str:
+        """Return the standard interactive chart filename for a market."""
+        safe_name = market.replace("/", "_").replace(" ", "_")
+        return f"{safe_name}_interactive.html"
+
+    def _signal_label(self, divergence_percentile: float) -> str:
+        """Translate divergence percentile into a dashboard-friendly label."""
+        if divergence_percentile >= 90:
+            return "Strong Bullish"
+        if divergence_percentile >= 75:
+            return "Lean Bullish"
+        if divergence_percentile <= 10:
+            return "Strong Bearish"
+        if divergence_percentile <= 25:
+            return "Lean Bearish"
+        return "Neutral"
+
+    def _signal_color(self, divergence_percentile: float) -> str:
+        """Return a cell color for the signal label."""
+        if divergence_percentile >= 90:
+            return "rgba(30, 132, 73, 0.22)"
+        if divergence_percentile >= 75:
+            return "rgba(88, 214, 141, 0.18)"
+        if divergence_percentile <= 10:
+            return "rgba(192, 57, 43, 0.22)"
+        if divergence_percentile <= 25:
+            return "rgba(236, 112, 99, 0.18)"
+        return "rgba(215, 219, 221, 0.22)"
+
+    def _latest_with_drilldown_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Build latest market rows with category, key-market, and change fields."""
+        sorted_df = df.sort_values(["market", "date"]).copy()
+        latest = sorted_df.groupby("market", as_index=False).tail(1).reset_index(drop=True)
+
+        contracts = get_enabled_contracts()
+        category_by_market = {
+            contract["display_name"]: contract.get("category", "other")
+            for contract in contracts
+        }
+        key_markets = set(get_key_markets())
+
+        changes = {}
+        for market, market_df in sorted_df.groupby("market"):
+            current = market_df.iloc[-1]
+            cutoff = current["date"] - pd.Timedelta(days=28)
+            previous = market_df[market_df["date"] <= cutoff]
+            if previous.empty:
+                changes[market] = np.nan
+            else:
+                changes[market] = (
+                    current.get("divergence_percentile", np.nan)
+                    - previous.iloc[-1].get("divergence_percentile", np.nan)
+                )
+
+        latest["category"] = latest["market"].map(category_by_market).fillna("other")
+        latest["category_label"] = latest["category"].str.replace("_", " ").str.title()
+        latest["is_key_market"] = latest["market"].isin(key_markets)
+        latest["signal_label"] = latest["divergence_percentile"].apply(self._signal_label)
+        latest["signal_color"] = latest["divergence_percentile"].apply(self._signal_color)
+        latest["divergence_change_4w"] = latest["market"].map(changes)
+        latest["intent_score"] = latest["divergence_percentile"] - 50
+        latest["chart_link"] = latest["market"].apply(
+            lambda market: (
+                f'<a href="{escape(self._interactive_chart_filename(market))}">'
+                f'{escape(market)}</a>'
+            )
+        )
+
+        return latest
+
     def create_dashboard(
         self,
         df: pd.DataFrame,
@@ -432,29 +503,99 @@ class COTVisualizer:
         Returns:
             Plotly Figure object
         """
-        # Get latest readings
-        latest = df.groupby("market").last().reset_index()
-        latest = latest.sort_values("divergence_percentile", ascending=False)
+        latest = self._latest_with_drilldown_fields(df)
+        most_recent = latest["date"].max()
+
+        strong_bull = len(
+            signals_df[
+                (signals_df["signal"] == "BULLISH")
+                & (signals_df["strength"] == "STRONG")
+            ]
+        ) if not signals_df.empty else 0
+        strong_bear = len(
+            signals_df[
+                (signals_df["signal"] == "BEARISH")
+                & (signals_df["strength"] == "STRONG")
+            ]
+        ) if not signals_df.empty else 0
+        moderate_bull = len(
+            signals_df[
+                (signals_df["signal"] == "BULLISH")
+                & (signals_df["strength"] == "MODERATE")
+            ]
+        ) if not signals_df.empty else 0
+        moderate_bear = len(
+            signals_df[
+                (signals_df["signal"] == "BEARISH")
+                & (signals_df["strength"] == "MODERATE")
+            ]
+        ) if not signals_df.empty else 0
+
+        key_table = latest[latest["is_key_market"]].copy()
+        key_table = key_table.sort_values("divergence_percentile", ascending=False)
+
+        bullish_extremes = latest.sort_values("divergence_percentile", ascending=False).head(10)
+        bearish_extremes = latest.sort_values("divergence_percentile", ascending=True).head(10)
+        extremes = pd.concat([bullish_extremes, bearish_extremes])
+        extremes = extremes.drop_duplicates("market")
+        extremes = extremes.sort_values("intent_score")
+        extremes_markets = extremes["market"].tolist()
+
+        drilldown = latest.sort_values(
+            ["category", "divergence_percentile"],
+            ascending=[True, False],
+        ).copy()
 
         fig = make_subplots(
-            rows=2,
-            cols=2,
-            column_widths=[0.7, 0.3],
+            rows=4,
+            cols=4,
             specs=[
-                [{"type": "scatter"}, {"type": "bar"}],
-                [{"type": "table", "colspan": 2}, None],
+                [
+                    {"type": "domain"},
+                    {"type": "domain"},
+                    {"type": "domain"},
+                    {"type": "domain"},
+                ],
+                [
+                    {"type": "scatter", "colspan": 2},
+                    None,
+                    {"type": "table", "colspan": 2},
+                    None,
+                ],
+                [{"type": "bar", "colspan": 4}, None, None, None],
+                [{"type": "table", "colspan": 4}, None, None, None],
             ],
             subplot_titles=(
-                "Market Positioning",
-                "Top Divergence Signals",
-                "Signal Details",
+                "Strong Bullish",
+                "Strong Bearish",
+                "Moderate Bullish",
+                "Moderate Bearish",
+                "Positioning Map",
+                "Key Markets",
+                "Bullish and Bearish Extremes",
+                "Category Drill Down",
             ),
-            vertical_spacing=0.15,
-            horizontal_spacing=0.08,
-            row_heights=[0.6, 0.4],
+            vertical_spacing=0.08,
+            horizontal_spacing=0.06,
+            row_heights=[0.13, 0.32, 0.23, 0.32],
         )
 
-        # Scatter plot of positioning
+        for col, value, color in [
+            (1, strong_bull, "#1e8449"),
+            (2, strong_bear, "#c0392b"),
+            (3, moderate_bull, "#58d68d"),
+            (4, moderate_bear, "#ec7063"),
+        ]:
+            fig.add_trace(
+                go.Indicator(
+                    mode="number",
+                    value=value,
+                    number=dict(font=dict(size=34, color=color)),
+                ),
+                row=1,
+                col=col,
+            )
+
         fig.add_trace(
             go.Scatter(
                 x=latest["commercial_net_pct"] * 100,
@@ -465,78 +606,269 @@ class COTVisualizer:
                     color=latest["divergence_percentile"],
                     colorscale="RdYlGn",
                     showscale=True,
+                    line=dict(
+                        width=np.where(latest["is_key_market"], 2, 0.5),
+                        color=np.where(latest["is_key_market"], "#111111", "#777777"),
+                    ),
                     colorbar=dict(
                         title="Div %ile",
-                        x=1.02,
+                        x=0.47,
                         thickness=15,
-                        len=0.5,
-                        y=0.75
+                        len=0.26,
+                        y=0.66,
                     ),
                 ),
                 text=latest["market"],
-                hovertemplate="<b>%{text}</b><br>Comm: %{x:.1f}%<br>Spec: %{y:.1f}%<extra></extra>",
+                customdata=np.stack(
+                    [
+                        latest["category_label"],
+                        latest["signal_label"],
+                        latest["divergence_percentile"],
+                        latest["divergence_change_4w"].fillna(0),
+                    ],
+                    axis=-1,
+                ),
+                hovertemplate=(
+                    "<b>%{text}</b><br>"
+                    "Category: %{customdata[0]}<br>"
+                    "Signal: %{customdata[1]}<br>"
+                    "Comm Net: %{x:.1f}%<br>"
+                    "Small Spec Net: %{y:.1f}%<br>"
+                    "Div %ile: %{customdata[2]:.0f}<br>"
+                    "4w Change: %{customdata[3]:+.0f}<extra></extra>"
+                ),
             ),
-            row=1,
+            row=2,
+            col=1,
+        )
+        fig.add_shape(
+            type="line",
+            x0=(latest["commercial_net_pct"] * 100).min(),
+            x1=(latest["commercial_net_pct"] * 100).max(),
+            y0=0,
+            y1=0,
+            xref="x",
+            yref="y",
+            line=dict(color="gray", dash="dash"),
+        )
+        fig.add_shape(
+            type="line",
+            x0=0,
+            x1=0,
+            y0=(latest["small_spec_net_pct"] * 100).min(),
+            y1=(latest["small_spec_net_pct"] * 100).max(),
+            xref="x",
+            yref="y",
+            line=dict(color="gray", dash="dash"),
+        )
+
+        key_colors = [key_table["signal_color"].tolist()] * 6
+        fig.add_trace(
+            go.Table(
+                columnwidth=[2.2, 1.2, 1.0, 1.0, 1.0, 0.9],
+                header=dict(
+                    values=[
+                        "Market",
+                        "Signal",
+                        "Div %ile",
+                        "4w Chg",
+                        "Comm %",
+                        "Spec %",
+                    ],
+                    fill_color="#e5e7eb",
+                    align="left",
+                    font=dict(size=12),
+                ),
+                cells=dict(
+                    values=[
+                        key_table["chart_link"],
+                        key_table["signal_label"],
+                        key_table["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
+                        key_table["divergence_change_4w"].apply(
+                            lambda x: "n/a" if pd.isna(x) else f"{x:+.0f}"
+                        ),
+                        key_table["commercial_net_pct"].apply(lambda x: f"{x:+.1%}"),
+                        key_table["small_spec_net_pct"].apply(lambda x: f"{x:+.1%}"),
+                    ],
+                    fill_color=key_colors,
+                    align="left",
+                    height=24,
+                    font=dict(size=11),
+                ),
+            ),
+            row=2,
+            col=3,
+        )
+
+        bar_colors = np.where(extremes["intent_score"] >= 0, "#1e8449", "#c0392b")
+        fig.add_trace(
+            go.Bar(
+                y=extremes["market"],
+                x=extremes["intent_score"],
+                orientation="h",
+                marker_color=bar_colors,
+                text=extremes["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
+                textposition="outside",
+                customdata=np.stack(
+                    [
+                        extremes["signal_label"],
+                        extremes["divergence_percentile"],
+                        extremes["divergence_change_4w"].fillna(0),
+                    ],
+                    axis=-1,
+                ),
+                hovertemplate=(
+                    "<b>%{y}</b><br>"
+                    "%{customdata[0]}<br>"
+                    "Div %ile: %{customdata[1]:.0f}<br>"
+                    "4w Change: %{customdata[2]:+.0f}<extra></extra>"
+                ),
+            ),
+            row=3,
+            col=1,
+        )
+        fig.add_shape(
+            type="line",
+            x0=0,
+            x1=0,
+            y0=-0.5,
+            y1=len(extremes) - 0.5,
+            xref="x2",
+            yref="y2",
+            line=dict(color="gray", dash="dash"),
+        )
+
+        def drilldown_table_values(table_df: pd.DataFrame) -> list[pd.Series]:
+            return [
+                table_df["category_label"],
+                table_df["chart_link"],
+                table_df["signal_label"],
+                table_df["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
+                table_df["divergence_change_4w"].apply(
+                    lambda x: "n/a" if pd.isna(x) else f"{x:+.0f}"
+                ),
+                table_df["commercial_net_pct"].apply(lambda x: f"{x:+.1%}"),
+                table_df["small_spec_net_pct"].apply(lambda x: f"{x:+.1%}"),
+                table_df["open_interest"].apply(lambda x: f"{x:,.0f}"),
+                table_df["is_key_market"].apply(lambda x: "Yes" if x else ""),
+            ]
+
+        def drilldown_fill_colors(table_df: pd.DataFrame) -> list[list[str]]:
+            return [table_df["signal_color"].tolist()] * 9
+
+        drilldown_trace_index = len(fig.data)
+        drill_colors = drilldown_fill_colors(drilldown)
+        fig.add_trace(
+            go.Table(
+                columnwidth=[1.0, 1.8, 1.2, 0.8, 0.8, 0.9, 0.9, 0.8, 0.6],
+                header=dict(
+                    values=[
+                        "Category",
+                        "Market",
+                        "Signal",
+                        "Div %ile",
+                        "4w Chg",
+                        "Comm %",
+                        "Spec %",
+                        "OI",
+                        "Key",
+                    ],
+                    fill_color="#e5e7eb",
+                    align="left",
+                    font=dict(size=12),
+                ),
+                cells=dict(
+                    values=drilldown_table_values(drilldown),
+                    fill_color=drill_colors,
+                    align="left",
+                    height=23,
+                    font=dict(size=11),
+                ),
+            ),
+            row=4,
             col=1,
         )
 
-        # Bar chart of top signals
-        top_signals = latest.head(15)
-        colors = ["green" if d >= 50 else "red" for d in top_signals["divergence_percentile"]]
-        fig.add_trace(
-            go.Bar(
-                y=top_signals["market"],
-                x=top_signals["divergence_percentile"],
-                orientation="h",
-                marker_color=colors,
-                hovertemplate="%{y}: %{x:.0f}%ile<extra></extra>",
-            ),
-            row=1,
-            col=2,
-        )
-
-        # Table of signals
-        if not signals_df.empty:
-            table_df = signals_df.head(10)
-            fig.add_trace(
-                go.Table(
-                    header=dict(
-                        values=["Market", "Signal", "Strength", "Comm Net", "Spec Net", "Div %ile"],
-                        fill_color="lightgray",
-                        align="left",
-                    ),
-                    cells=dict(
-                        values=[
-                            table_df["market"],
-                            table_df["signal"],
-                            table_df["strength"],
-                            table_df["commercial_net_pct"].apply(lambda x: f"{x:.1%}"),
-                            table_df["small_spec_net_pct"].apply(lambda x: f"{x:.1%}"),
-                            table_df["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
-                        ],
-                        fill_color=[
-                            [
-                                "rgba(144, 238, 144, 0.3)" if s == "BULLISH" else "rgba(240, 128, 128, 0.3)"
-                                for s in table_df["signal"]
-                            ]
-                        ]
-                        * 6,
-                        align="left",
-                    ),
-                ),
-                row=2,
-                col=1,
+        drilldown_sort_options = [
+            ("Category", ["category", "divergence_percentile"], [True, False]),
+            ("Market A-Z", ["market"], [True]),
+            ("Div High-Low", ["divergence_percentile"], [False]),
+            ("Div Low-High", ["divergence_percentile"], [True]),
+            ("4w Chg Up", ["divergence_change_4w"], [False]),
+            ("4w Chg Down", ["divergence_change_4w"], [True]),
+            ("Commercial %", ["commercial_net_pct"], [False]),
+            ("Small Spec %", ["small_spec_net_pct"], [False]),
+            ("Open Interest", ["open_interest"], [False]),
+            ("Key First", ["is_key_market", "category", "market"], [False, True, True]),
+        ]
+        drilldown_buttons = []
+        for label, sort_columns, ascending in drilldown_sort_options:
+            sorted_drilldown = drilldown.sort_values(
+                sort_columns,
+                ascending=ascending,
+                na_position="last",
+            )
+            drilldown_buttons.append(
+                dict(
+                    label=label,
+                    method="restyle",
+                    args=[
+                        {
+                            "cells.values": [drilldown_table_values(sorted_drilldown)],
+                            "cells.fill.color": [drilldown_fill_colors(sorted_drilldown)],
+                        },
+                        [drilldown_trace_index],
+                    ],
+                )
             )
 
         fig.update_layout(
-            title="COT Analysis Dashboard",
-            height=1100,
+            title=(
+                "COT Analysis Dashboard"
+                f"<br><sup>Data as of {most_recent:%Y-%m-%d}; "
+                f"{len(latest)} markets analyzed. Click market names in tables "
+                "to open individual interactive charts when generated.</sup>"
+            ),
+            height=1550,
             showlegend=False,
+            margin=dict(l=40, r=40, t=110, b=40),
+            updatemenus=[
+                dict(
+                    buttons=drilldown_buttons,
+                    direction="down",
+                    showactive=True,
+                    x=0,
+                    xanchor="left",
+                    y=0.285,
+                    yanchor="top",
+                )
+            ],
+        )
+        fig.add_annotation(
+            text="Sort drill down:",
+            x=0,
+            xanchor="left",
+            y=0.306,
+            yanchor="top",
+            xref="paper",
+            yref="paper",
+            showarrow=False,
+            font=dict(size=12),
         )
 
-        fig.update_xaxes(title_text="Commercial Net %", row=1, col=1)
-        fig.update_yaxes(title_text="Small Spec Net %", row=1, col=1)
-        fig.update_xaxes(title_text="Divergence Percentile", row=1, col=2)
+        fig.update_xaxes(title_text="Commercial Net %", row=2, col=1)
+        fig.update_yaxes(title_text="Small Spec Net %", row=2, col=1)
+        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=3, col=1)
+        fig.update_yaxes(
+            automargin=True,
+            categoryorder="array",
+            categoryarray=extremes_markets,
+            tickmode="array",
+            tickvals=extremes_markets,
+            ticktext=extremes_markets,
+            row=3,
+            col=1,
+        )
 
         if save_path:
             fig.write_html(save_path)
@@ -613,7 +945,7 @@ class COTVisualizer:
                     plt.close()
 
                     # Interactive chart
-                    interactive_path = charts_dir / f"{safe_name}_interactive.html"
+                    interactive_path = charts_dir / self._interactive_chart_filename(market)
                     self.plot_interactive_positions(df, market, save_path=interactive_path)
                     saved[f"{market}_interactive"] = interactive_path
                 except Exception as e:
