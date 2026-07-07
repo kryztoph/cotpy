@@ -74,6 +74,8 @@ class Config:
     disaggregated_url_template: str = (
         "https://www.cftc.gov/files/dea/history/fut_disagg_txt_{year}.zip"
     )
+    current_legacy_url: str = "https://www.cftc.gov/dea/newcot/deafut.txt"
+    current_disaggregated_url: str = "https://www.cftc.gov/dea/newcot/f_disagg.txt"
 
     # Signal thresholds
     # Commercials net long + small specs net short = bullish
@@ -113,6 +115,14 @@ class Config:
     def get_disaggregated_url(self, year: int) -> str:
         """Get URL for Disaggregated COT report."""
         return self.disaggregated_url_template.format(year=year)
+
+    def get_current_legacy_url(self) -> str:
+        """Get URL for current-week Legacy futures COT report."""
+        return self.current_legacy_url
+
+    def get_current_disaggregated_url(self) -> str:
+        """Get URL for current-week Disaggregated futures COT report."""
+        return self.current_disaggregated_url
 
 
 # Default configuration instance

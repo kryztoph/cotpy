@@ -6,6 +6,7 @@ PYTHON="$PROJECT_DIR/.venv/bin/python"
 LOG_DIR="$PROJECT_DIR/logs"
 LOCK_DIR="$PROJECT_DIR/.cotpy-weekly.lock"
 MPLCONFIGDIR="$PROJECT_DIR/.cache/matplotlib"
+PUBLISH_REPORTS="${COTPY_PUBLISH_REPORTS:-1}"
 
 mkdir -p "$LOG_DIR"
 mkdir -p "$MPLCONFIGDIR"
@@ -46,6 +47,10 @@ cd "$PROJECT_DIR"
   "$PYTHON" main.py --analyze --signals --export --dashboard
   "$PYTHON" report.py
   "$PYTHON" summary_report.py
+
+  if [ "$PUBLISH_REPORTS" = "1" ]; then
+    ./scripts/publish_to_csfox.sh
+  fi
 
   echo "================================================================"
   echo "$(date '+%Y-%m-%d %H:%M:%S %Z') cotpy weekly refresh completed"

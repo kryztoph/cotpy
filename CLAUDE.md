@@ -88,6 +88,7 @@ Detailed flow for `main.py` commands:
 - `main.py`: CLI entry point and command orchestration.
 - `report.py`: Generates `output/trade_setup_report.txt`.
 - `summary_report.py`: Generates `output/position_summary.txt` and `output/position_summary.csv`.
+- `scripts/publish_to_csfox.sh`: Publishes generated `output/` reports to `kryztoph/csfox` under `reports/cotpy/` using `gh api`.
 - `src/config.py`: Config dataclass plus helpers for reading `contracts.json`.
 - `src/fetcher.py`: Downloads yearly zip files from the CFTC and extracts `.txt` payloads into `data/`.
 - `src/parser.py`: Selects CFTC columns, parses dates, normalizes market names, filters to enabled contracts, and computes derived fields.
@@ -154,6 +155,12 @@ Common outputs:
 - `output/trade_setup_report.txt`
 - `output/position_summary.txt`
 - `output/position_summary.csv`
+
+Publishing:
+
+- `scripts/run_cotpy_weekly.sh` publishes to `kryztoph/csfox` after generation by default.
+- Set `COTPY_PUBLISH_REPORTS=0` to skip publishing, or run `scripts/publish_to_csfox.sh` manually.
+- Published paths live under `reports/cotpy/` in the `csfox` repo.
 
 Cached downloads:
 

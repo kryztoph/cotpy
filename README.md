@@ -141,8 +141,20 @@ scripts/run_cotpy_weekly.sh
 
 The runner uses `main.py --update --force`, verifies the current-year COT files
 were actually refreshed, then regenerates analysis, signals, CSV exports,
-dashboard, trade setup report, and position summary. Logs are written to
-`logs/weekly.log`.
+dashboard, trade setup report, and position summary. By default it then
+publishes the refreshed reports to the `kryztoph/csfox` GitHub repo under
+`reports/cotpy/`. Logs are written to `logs/weekly.log`.
+
+Publish reports manually:
+
+```bash
+scripts/publish_to_csfox.sh
+```
+
+Set `COTPY_PUBLISH_REPORTS=0` to skip publishing from the weekly runner. The
+publisher uses `gh api`; `gh` must be installed and authenticated. Override the
+target with `COTPY_PUBLISH_REPO`, `COTPY_PUBLISH_BRANCH`, or
+`COTPY_PUBLISH_PREFIX`.
 
 Check status:
 
