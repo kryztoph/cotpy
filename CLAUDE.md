@@ -29,6 +29,7 @@ python main.py --chart "GOLD"
 python main.py --chart "GOLD" --interactive
 python main.py --dashboard
 python main.py --key-charts
+python main.py --market-charts
 python main.py --export
 python main.py --list-markets
 python main.py --all
@@ -76,7 +77,7 @@ Detailed flow for `main.py` commands:
 - Only enabled contracts from `contracts.json` survive parsing when the config helper returns names.
 - `Config.__post_init__()` creates `data/`, `output/`, and `output/charts/` automatically.
 - `main.py --years N` affects both the fetch range and the historical percentile window because it sets `Config(historical_years=args.years)`.
-- `main.py --all` runs `--update`, `--analyze`, `--signals`, `--export`, `--dashboard`, and key-market chart generation, but it does not run `report.py` or `summary_report.py`.
+- `main.py --all` runs `--update`, `--analyze`, `--signals`, `--export`, and all enabled-market chart generation, but it does not run `report.py` or `summary_report.py`.
 - Supplying multiple CLI flags causes each command handler to reload and reanalyze data independently; there is no shared in-memory pipeline across handlers.
 - `main.py --chart ...` expects the normalized display name used after `contracts.json` mapping, not necessarily the raw CFTC market string.
 - `main.py --chart ...` output filenames only sanitize `/`, so chart names with other punctuation keep that punctuation in the file name.
@@ -162,8 +163,9 @@ Common outputs:
 
 Publishing:
 
-- `scripts/run_cotpy_weekly.sh` generates all enabled key-market static and interactive charts, then publishes to `kryztoph/csfox-reports` by default.
+- `scripts/run_cotpy_weekly.sh` generates static and interactive charts for all enabled markets, then publishes to `kryztoph/csfox-reports` by default.
 - Set `COTPY_PUBLISH_REPORTS=0` to skip publishing, or run `scripts/publish_to_csfox.sh` manually.
+- The publisher explicitly triggers a GitHub Pages rebuild after updating the reports branch.
 - Published paths live under `cotpy/` in the `csfox-reports` repo.
 
 Cached downloads:

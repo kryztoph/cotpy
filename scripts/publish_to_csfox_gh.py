@@ -17,6 +17,7 @@ DEFAULT_REPO = "kryztoph/csfox-reports"
 BRANCH = os.environ.get("COTPY_PUBLISH_BRANCH", "master")
 TARGET_PREFIX = os.environ.get("COTPY_PUBLISH_PREFIX", "cotpy").strip("/")
 DRY_RUN = os.environ.get("COTPY_PUBLISH_DRY_RUN", "0") == "1"
+TRIGGER_PAGES = os.environ.get("COTPY_PUBLISH_TRIGGER_PAGES", "1") == "1"
 
 
 TEXT_REPORTS = [
@@ -97,6 +98,12 @@ def main() -> int:
         method="PATCH",
         body={"sha": commit["sha"], "force": False},
     )
+    if TRIGGER_PAGES:
+        try:
+            _gh_json(f"repos/{repo}/pages/builds", method="POST")
+            print("triggered GitHub Pages rebuild")
+        except RuntimeError as exc:
+            print(f"warning: could not trigger GitHub Pages rebuild: {exc}", file=sys.stderr)
     print(f"published cotpy reports to {repo}@{BRANCH}: {commit['sha']}")
     return 0
 

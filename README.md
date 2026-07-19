@@ -36,6 +36,7 @@ python report.py
 | `--export, -e` | Export analysis results to CSV |
 | `--dashboard, -d` | Generate interactive dashboard |
 | `--key-charts` | Generate static and interactive charts for all key markets |
+| `--market-charts` | Generate static and interactive charts for all enabled markets |
 | `--list-markets, -l` | List all available markets |
 | `--all` | Run complete pipeline |
 | `--force, -f` | Force re-download of data files |
@@ -67,6 +68,9 @@ python main.py --dashboard
 
 # Generate the complete key-market chart set
 python main.py --key-charts
+
+# Generate charts for every enabled market
+python main.py --market-charts
 
 # List all available markets
 python main.py --list-markets
@@ -145,7 +149,7 @@ scripts/run_cotpy_weekly.sh
 
 The runner uses `main.py --update --force`, verifies the current-year COT files
 were actually refreshed, then regenerates analysis, signals, CSV exports, the
-dashboard, all static and interactive key-market charts, the trade setup report,
+dashboard, all static and interactive enabled-market charts, the trade setup report,
 and position summary. By default it then
 publishes the refreshed reports to the `kryztoph/csfox-reports` GitHub Pages
 repo under `cotpy/`. Logs are written to `logs/weekly.log`.
@@ -159,7 +163,8 @@ scripts/publish_to_csfox.sh
 Set `COTPY_PUBLISH_REPORTS=0` to skip publishing from the weekly runner. The
 publisher uses `gh api`; `gh` must be installed and authenticated. Override the
 target with `COTPY_PUBLISH_REPO`, `COTPY_PUBLISH_BRANCH`, or
-`COTPY_PUBLISH_PREFIX`.
+`COTPY_PUBLISH_PREFIX`. GitHub Pages rebuild triggering can be disabled with
+`COTPY_PUBLISH_TRIGGER_PAGES=0`.
 
 Check status:
 

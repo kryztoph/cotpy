@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import Config, get_key_markets
+from src.config import Config, get_enabled_display_names, get_key_markets
 from src.fetcher import COTFetcher
 from src.parser import COTParser
 from src.analyzer import COTAnalyzer
@@ -42,6 +42,7 @@ Examples:
   python main.py --chart "S&P 500" --interactive  # Interactive chart
   python main.py --export                    # Export analysis to CSV
   python main.py --key-charts                # Generate charts for all key markets
+  python main.py --market-charts              # Generate charts for all enabled markets
   python main.py --all                       # Run complete pipeline
         """,
     )
@@ -98,6 +99,11 @@ Examples:
         help="Generate static and interactive charts for all enabled key markets",
     )
     parser.add_argument(
+        "--market-charts",
+        action="store_true",
+        help="Generate static and interactive charts for all enabled markets",
+    )
+    parser.add_argument(
         "--list-markets", "-l",
         action="store_true",
         help="List all available markets",
@@ -105,7 +111,7 @@ Examples:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run complete pipeline (update, analyze, signals, export, key charts)",
+        help="Run complete pipeline (update, analyze, signals, export, market charts)",
     )
     parser.add_argument(
         "--years",
@@ -301,6 +307,22 @@ def cmd_key_charts(config: Config):
     print(f"Saved {len(saved)} chart artifacts to {config.charts_dir}")
 
 
+def cmd_market_charts(config: Config):
+    """Generate the complete chart set for all enabled markets."""
+    markets = get_enabled_display_names()
+    print(f"Generating charts for {len(markets)} enabled markets...")
+
+    df, signals_df = load_and_analyze_data(config)
+    visualizer = COTVisualizer(config)
+    saved = visualizer.save_all_charts(
+        df,
+        signals_df,
+        markets=markets,
+    )
+
+    print(f"Saved {len(saved)} chart artifacts to {config.charts_dir}")
+
+
 def cmd_list_markets(config: Config):
     """List all available markets."""
     fetcher = COTFetcher(config)
@@ -341,7 +363,7 @@ def main():
         args.analyze = True
         args.signals = True
         args.export = True
-        args.key_charts = True
+        args.market_charts = True
 
     # Execute commands
     try:
@@ -375,6 +397,10 @@ def main():
 
         if args.key_charts:
             cmd_key_charts(config)
+            print()
+
+        if args.market_charts:
+            cmd_market_charts(config)
             print()
 
     except KeyboardInterrupt:

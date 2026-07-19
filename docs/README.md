@@ -107,8 +107,9 @@ There is no shared in-memory pipeline across handlers.
 | `--export, -e` | Export analysis results to CSV |
 | `--dashboard, -d` | Generate interactive dashboard |
 | `--key-charts` | Generate static and interactive charts for all key markets |
+| `--market-charts` | Generate static and interactive charts for all enabled markets |
 | `--list-markets, -l` | List all available markets |
-| `--all` | Run complete pipeline (update, analyze, signals, export, key charts) |
+| `--all` | Run complete pipeline (update, analyze, signals, export, market charts) |
 | `--years N` | Number of years of historical data (default: 3) |
 
 `--all` does **not** run `report.py` or `summary_report.py`.
@@ -127,6 +128,7 @@ python main.py --chart "CRUDE OIL, LIGHT SWEET"
 python main.py --export
 python main.py --dashboard
 python main.py --key-charts
+python main.py --market-charts
 python main.py --list-markets
 python main.py --years 5
 ```
@@ -258,7 +260,7 @@ A shell script at `scripts/run_cotpy_weekly.sh` runs the full pipeline:
 
 1. `main.py --update --force` — re-downloads all data
 2. Verifies current-year files were refreshed in the last 24 hours
-3. `main.py --analyze --signals --export --key-charts`
+3. `main.py --analyze --signals --export --market-charts`
 4. `report.py`
 5. `summary_report.py`
 
