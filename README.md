@@ -35,6 +35,7 @@ python report.py
 | `--interactive, -i` | Generate interactive Plotly chart (with --chart) |
 | `--export, -e` | Export analysis results to CSV |
 | `--dashboard, -d` | Generate interactive dashboard |
+| `--key-charts` | Generate static and interactive charts for all key markets |
 | `--list-markets, -l` | List all available markets |
 | `--all` | Run complete pipeline |
 | `--force, -f` | Force re-download of data files |
@@ -63,6 +64,9 @@ python main.py --export
 
 # Generate interactive dashboard
 python main.py --dashboard
+
+# Generate the complete key-market chart set
+python main.py --key-charts
 
 # List all available markets
 python main.py --list-markets
@@ -140,10 +144,11 @@ scripts/run_cotpy_weekly.sh
 ```
 
 The runner uses `main.py --update --force`, verifies the current-year COT files
-were actually refreshed, then regenerates analysis, signals, CSV exports,
-dashboard, trade setup report, and position summary. By default it then
-publishes the refreshed reports to the `kryztoph/csfox` GitHub repo under
-`reports/cotpy/`. Logs are written to `logs/weekly.log`.
+were actually refreshed, then regenerates analysis, signals, CSV exports, the
+dashboard, all static and interactive key-market charts, the trade setup report,
+and position summary. By default it then
+publishes the refreshed reports to the `kryztoph/csfox-reports` GitHub Pages
+repo under `cotpy/`. Logs are written to `logs/weekly.log`.
 
 Publish reports manually:
 

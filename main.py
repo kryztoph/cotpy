@@ -11,7 +11,8 @@ Usage:
     python main.py --signals         # Show current signals
     python main.py --chart MARKET    # Generate charts for specific market
     python main.py --export          # Export all to CSV
-    python main.py --dashboard       # Open interactive dashboard
+    python main.py --dashboard       # Generate interactive dashboard
+    python main.py --key-charts      # Generate charts for all key markets
 """
 
 import argparse
@@ -20,7 +21,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from src.config import Config
+from src.config import Config, get_key_markets
 from src.fetcher import COTFetcher
 from src.parser import COTParser
 from src.analyzer import COTAnalyzer
@@ -40,6 +41,7 @@ Examples:
   python main.py --chart "GOLD"              # Generate charts for Gold
   python main.py --chart "S&P 500" --interactive  # Interactive chart
   python main.py --export                    # Export analysis to CSV
+  python main.py --key-charts                # Generate charts for all key markets
   python main.py --all                       # Run complete pipeline
         """,
     )
@@ -91,6 +93,11 @@ Examples:
         help="Generate interactive dashboard",
     )
     parser.add_argument(
+        "--key-charts",
+        action="store_true",
+        help="Generate static and interactive charts for all enabled key markets",
+    )
+    parser.add_argument(
         "--list-markets", "-l",
         action="store_true",
         help="List all available markets",
@@ -98,7 +105,7 @@ Examples:
     parser.add_argument(
         "--all",
         action="store_true",
-        help="Run complete pipeline (update, analyze, signals, export, dashboard)",
+        help="Run complete pipeline (update, analyze, signals, export, key charts)",
     )
     parser.add_argument(
         "--years",
@@ -278,6 +285,22 @@ def cmd_dashboard(config: Config):
     print(f"\nOpen {dashboard_path} in your browser")
 
 
+def cmd_key_charts(config: Config):
+    """Generate the complete chart set for enabled key markets."""
+    key_markets = get_key_markets()
+    print(f"Generating charts for {len(key_markets)} key markets...")
+
+    df, signals_df = load_and_analyze_data(config)
+    visualizer = COTVisualizer(config)
+    saved = visualizer.save_all_charts(
+        df,
+        signals_df,
+        markets=key_markets,
+    )
+
+    print(f"Saved {len(saved)} chart artifacts to {config.charts_dir}")
+
+
 def cmd_list_markets(config: Config):
     """List all available markets."""
     fetcher = COTFetcher(config)
@@ -318,7 +341,7 @@ def main():
         args.analyze = True
         args.signals = True
         args.export = True
-        args.dashboard = True
+        args.key_charts = True
 
     # Execute commands
     try:
@@ -348,6 +371,10 @@ def main():
 
         if args.dashboard:
             cmd_dashboard(config)
+            print()
+
+        if args.key_charts:
+            cmd_key_charts(config)
             print()
 
     except KeyboardInterrupt:

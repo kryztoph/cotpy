@@ -44,7 +44,7 @@ cd "$PROJECT_DIR"
     exit 1
   fi
 
-  "$PYTHON" main.py --analyze --signals --export --dashboard
+  "$PYTHON" main.py --analyze --signals --export --key-charts
   "$PYTHON" report.py
   "$PYTHON" summary_report.py
 

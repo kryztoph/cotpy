@@ -13,9 +13,9 @@ from urllib.parse import urlparse
 
 
 PROJECT_DIR = Path(os.environ.get("COTPY_PROJECT_DIR", "/Users/fox/Private/Projects/cotpy"))
-DEFAULT_REPO = "kryztoph/csfox"
+DEFAULT_REPO = "kryztoph/csfox-reports"
 BRANCH = os.environ.get("COTPY_PUBLISH_BRANCH", "master")
-TARGET_PREFIX = os.environ.get("COTPY_PUBLISH_PREFIX", "reports/cotpy").strip("/")
+TARGET_PREFIX = os.environ.get("COTPY_PUBLISH_PREFIX", "cotpy").strip("/")
 DRY_RUN = os.environ.get("COTPY_PUBLISH_DRY_RUN", "0") == "1"
 
 
@@ -37,6 +37,7 @@ def main() -> int:
     repo = _repo_name()
     files = _publish_files()
     generated = _index_html(files)
+    generated["index.html"] = _site_index()
 
     if DRY_RUN:
         print(f"would publish cotpy reports to {repo}@{BRANCH}/{TARGET_PREFIX}")
@@ -168,6 +169,23 @@ def _index_html(files: list[tuple[Path, str]]) -> dict[str, str]:
         ]
     )
     return {f"{TARGET_PREFIX}/index.html": content}
+
+
+def _site_index() -> str:
+    """Create the repository-root landing page for GitHub Pages."""
+    return """<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="refresh" content="0; url=cotpy/index.html">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CSFox Reports</title>
+  </head>
+  <body>
+    <p><a href="cotpy/index.html">Open CSFox reports</a></p>
+  </body>
+</html>
+"""
 
 
 def _create_blob(repo: str, content: bytes) -> dict[str, object]:

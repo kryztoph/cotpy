@@ -28,6 +28,7 @@ python main.py --signals --strong-only
 python main.py --chart "GOLD"
 python main.py --chart "GOLD" --interactive
 python main.py --dashboard
+python main.py --key-charts
 python main.py --export
 python main.py --list-markets
 python main.py --all
@@ -75,7 +76,7 @@ Detailed flow for `main.py` commands:
 - Only enabled contracts from `contracts.json` survive parsing when the config helper returns names.
 - `Config.__post_init__()` creates `data/`, `output/`, and `output/charts/` automatically.
 - `main.py --years N` affects both the fetch range and the historical percentile window because it sets `Config(historical_years=args.years)`.
-- `main.py --all` runs `--update`, `--analyze`, `--signals`, `--export`, and `--dashboard`, but it does not run `report.py` or `summary_report.py`.
+- `main.py --all` runs `--update`, `--analyze`, `--signals`, `--export`, `--dashboard`, and key-market chart generation, but it does not run `report.py` or `summary_report.py`.
 - Supplying multiple CLI flags causes each command handler to reload and reanalyze data independently; there is no shared in-memory pipeline across handlers.
 - `main.py --chart ...` expects the normalized display name used after `contracts.json` mapping, not necessarily the raw CFTC market string.
 - `main.py --chart ...` output filenames only sanitize `/`, so chart names with other punctuation keep that punctuation in the file name.
@@ -88,7 +89,7 @@ Detailed flow for `main.py` commands:
 - `main.py`: CLI entry point and command orchestration.
 - `report.py`: Generates `output/trade_setup_report.txt`.
 - `summary_report.py`: Generates `output/position_summary.txt` and `output/position_summary.csv`.
-- `scripts/publish_to_csfox.sh`: Publishes generated `output/` reports to `kryztoph/csfox` under `reports/cotpy/` using `gh api`.
+- `scripts/publish_to_csfox.sh`: Publishes generated `output/` reports to `kryztoph/csfox-reports` under `cotpy/` using `gh api`.
 - `src/config.py`: Config dataclass plus helpers for reading `contracts.json`.
 - `src/fetcher.py`: Downloads yearly zip files from the CFTC and extracts `.txt` payloads into `data/`.
 - `src/parser.py`: Selects CFTC columns, parses dates, normalizes market names, filters to enabled contracts, and computes derived fields.
@@ -152,15 +153,18 @@ Common outputs:
 - `output/charts/dashboard.html`
 - `output/charts/*_interactive.html`
 - `output/charts/*_positions.png`
+- `output/charts/divergence_heatmap.png`
+- `output/charts/signal_summary.png`
+- `output/charts/market_comparison.html`
 - `output/trade_setup_report.txt`
 - `output/position_summary.txt`
 - `output/position_summary.csv`
 
 Publishing:
 
-- `scripts/run_cotpy_weekly.sh` publishes to `kryztoph/csfox` after generation by default.
+- `scripts/run_cotpy_weekly.sh` generates all enabled key-market static and interactive charts, then publishes to `kryztoph/csfox-reports` by default.
 - Set `COTPY_PUBLISH_REPORTS=0` to skip publishing, or run `scripts/publish_to_csfox.sh` manually.
-- Published paths live under `reports/cotpy/` in the `csfox` repo.
+- Published paths live under `cotpy/` in the `csfox-reports` repo.
 
 Cached downloads:
 
