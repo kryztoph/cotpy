@@ -305,16 +305,29 @@ class COTVisualizer:
             market_df["date"].max(),
         )
         if not prices.empty:
+            # Candlestick overlay retained for possible future reuse:
+            # fig.add_trace(
+            #     go.Candlestick(
+            #         x=prices["date"],
+            #         open=prices["open"],
+            #         high=prices["high"],
+            #         low=prices["low"],
+            #         close=prices["close"],
+            #         name="Price",
+            #         increasing_line_color="#16803c",
+            #         decreasing_line_color="#c0392b",
+            #     ),
+            #     row=1,
+            #     col=1,
+            #     secondary_y=True,
+            # )
             fig.add_trace(
-                go.Candlestick(
+                go.Scatter(
                     x=prices["date"],
-                    open=prices["open"],
-                    high=prices["high"],
-                    low=prices["low"],
-                    close=prices["close"],
+                    y=prices["close"],
                     name="Price",
-                    increasing_line_color="#16803c",
-                    decreasing_line_color="#c0392b",
+                    line=dict(color="black", width=1.5),
+                    hovertemplate="%{y:,.4g}<extra>Price</extra>",
                 ),
                 row=1,
                 col=1,
