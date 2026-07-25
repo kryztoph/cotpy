@@ -378,7 +378,9 @@ class COTVisualizer:
             height=1000,
             showlegend=True,
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-            hovermode="x unified",
+            # Keep each panel's hover readout focused on its own series;
+            # unified hover repeats the top-panel data over divergence bars.
+            hovermode="closest",
         )
 
         fig.update_yaxes(title_text="% of OI", row=1, col=1)
