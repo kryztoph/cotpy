@@ -18,6 +18,7 @@ BRANCH = os.environ.get("COTPY_PUBLISH_BRANCH", "master")
 TARGET_PREFIX = os.environ.get("COTPY_PUBLISH_PREFIX", "cotpy").strip("/")
 DRY_RUN = os.environ.get("COTPY_PUBLISH_DRY_RUN", "0") == "1"
 TRIGGER_PAGES = os.environ.get("COTPY_PUBLISH_TRIGGER_PAGES", "1") == "1"
+LOGO_SOURCE = Path(os.environ.get("COTPY_LOGO_SOURCE", "/Users/fox/Private/Projects/csfox/assets/logo.png"))
 
 
 TEXT_REPORTS = [
@@ -155,6 +156,11 @@ def _index_html(files: list[tuple[Path, str]]) -> dict[str, str]:
             label = "dashboard.html"
         links.append(f'      <li><a href="{href}">{label}</a></li>')
 
+    logo = ""
+    if LOGO_SOURCE.is_file():
+        encoded = base64.b64encode(LOGO_SOURCE.read_bytes()).decode("ascii")
+        logo = f'<img src="data:image/png;base64,{encoded}" alt="CSFox" style="width:90px;height:48px;object-fit:contain">'
+
     content = "\n".join(
         [
             "<!doctype html>",
@@ -164,12 +170,14 @@ def _index_html(files: list[tuple[Path, str]]) -> dict[str, str]:
             "    <title>COT Reports</title>",
             '    <meta name="viewport" content="width=device-width, initial-scale=1">',
             "  </head>",
-            "  <body>",
+            "  <body style=\"font-family:Arial,sans-serif;max-width:1100px;margin:0 auto;padding:18px\">",
+            f"    <p>{logo}</p>",
             "    <h1>COT Reports</h1>",
             "    <p>Generated Commitments of Traders analysis reports.</p>",
             "    <ul>",
             *links,
             "    </ul>",
+            "    <footer style=\"color:#6b7280;font-size:12px;margin-top:24px\">© 2026 csfox.com. All rights reserved.</footer>",
             "  </body>",
             "</html>",
             "",
@@ -190,6 +198,7 @@ def _site_index() -> str:
   </head>
   <body>
     <p><a href="cotpy/index.html">Open CSFox reports</a></p>
+    <footer>© 2026 csfox.com. All rights reserved.</footer>
   </body>
 </html>
 """

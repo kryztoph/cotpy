@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 from html import escape
+import base64
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,6 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from .config import Config, default_config, get_enabled_contracts, get_key_markets
+from .prices import price_fetcher
 
 
 class COTVisualizer:
@@ -25,6 +27,33 @@ class COTVisualizer:
         """Set up matplotlib style."""
         plt.style.use("seaborn-v0_8-darkgrid")
         sns.set_palette("husl")
+
+    def _write_branded_html(self, fig: go.Figure, save_path: Path) -> None:
+        """Write a self-contained Plotly page with CSFox branding."""
+        logo_path = Path("/Users/fox/Private/Projects/csfox/assets/logo.png")
+        logo_html = ""
+        if logo_path.is_file():
+            encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+            logo_html = (
+                '<img class="csfox-logo" '
+                f'src="data:image/png;base64,{encoded}" alt="CSFox">'
+            )
+
+        html = fig.to_html(full_html=True)
+        branding = f"""
+<style>
+  body {{ margin: 0; font-family: Arial, sans-serif; }}
+  .csfox-header {{ display: flex; align-items: center; gap: 12px; padding: 10px 18px 0; }}
+  .csfox-logo {{ width: 72px; height: 38px; object-fit: contain; }}
+  .csfox-title {{ font-size: 18px; font-weight: 600; color: #172554; }}
+  .csfox-footer {{ padding: 8px 18px 14px; color: #6b7280; font-size: 11px; text-align: center; }}
+</style>
+<header class="csfox-header">{logo_html}<span class="csfox-title">CSFox Reports</span></header>
+"""
+        footer = '<footer class="csfox-footer">© 2026 csfox.com. All rights reserved.</footer>'
+        html = html.replace("<body>", f"<body>{branding}", 1)
+        html = html.replace("</body>", f"{footer}</body>", 1)
+        save_path.write_text(html, encoding="utf-8")
 
     # =========================================================================
     # Matplotlib / Seaborn Charts (Static)
@@ -245,6 +274,7 @@ class COTVisualizer:
             rows=3,
             cols=1,
             shared_xaxes=True,
+            specs=[[{"secondary_y": True}], [{}], [{}]],
             vertical_spacing=0.08,
             subplot_titles=(
                 "Net Positions (% of OI)",
@@ -266,6 +296,30 @@ class COTVisualizer:
             row=1,
             col=1,
         )
+
+        # Prices are kept on a secondary axis because the position series are
+        # percentages while prices use contract-specific units.
+        prices = price_fetcher.get_prices(
+            market,
+            market_df["date"].min(),
+            market_df["date"].max(),
+        )
+        if not prices.empty:
+            fig.add_trace(
+                go.Candlestick(
+                    x=prices["date"],
+                    open=prices["open"],
+                    high=prices["high"],
+                    low=prices["low"],
+                    close=prices["close"],
+                    name="Price",
+                    increasing_line_color="#16803c",
+                    decreasing_line_color="#c0392b",
+                ),
+                row=1,
+                col=1,
+                secondary_y=True,
+            )
         fig.add_trace(
             go.Scatter(
                 x=market_df["date"],
@@ -328,6 +382,7 @@ class COTVisualizer:
         )
 
         fig.update_yaxes(title_text="% of OI", row=1, col=1)
+        fig.update_yaxes(title_text="Price", secondary_y=True, row=1, col=1)
         fig.update_yaxes(title_text="Divergence %", row=2, col=1)
         fig.update_yaxes(title_text="Contracts", row=3, col=1)
 
@@ -336,7 +391,7 @@ class COTVisualizer:
         fig.add_hline(y=0, line_dash="dash", line_color="gray", row=2, col=1)
 
         if save_path:
-            fig.write_html(save_path)
+            self._write_branded_html(fig, save_path)
             print(f"Saved interactive chart to {save_path}")
 
         return fig
@@ -411,7 +466,7 @@ class COTVisualizer:
         )
 
         if save_path:
-            fig.write_html(save_path)
+            self._write_branded_html(fig, save_path)
             print(f"Saved comparison chart to {save_path}")
 
         return fig
@@ -871,7 +926,7 @@ class COTVisualizer:
         )
 
         if save_path:
-            fig.write_html(save_path)
+            self._write_branded_html(fig, save_path)
             print(f"Saved dashboard to {save_path}")
 
         return fig

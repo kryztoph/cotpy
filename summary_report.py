@@ -229,6 +229,7 @@ def generate_summary_report():
     lines.append("  Lean Bear   = Divergence <= 25th percentile")
     lines.append("  STRONG BEAR = Divergence <= 10th percentile")
     lines.append("=" * 100)
+    lines.append("© 2026 csfox.com. All rights reserved.")
 
     # Print report
     report = "\n".join(lines)

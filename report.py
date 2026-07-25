@@ -215,7 +215,6 @@ def generate_report():
         print(f"Strong Bullish: {strong_bull} | Moderate Bullish: {mod_bull}")
         print(f"Strong Bearish: {strong_bear} | Moderate Bearish: {mod_bear}")
         print()
-
         if strong_bullish:
             print("STRONG BULLISH:")
             for s in strong_bullish:
@@ -228,7 +227,7 @@ def generate_report():
 
         output = sys.stdout.getvalue()
         sys.stdout = old_stdout
-        f.write(output)
+        f.write(output.rstrip() + "\n\n© 2026 csfox.com. All rights reserved.\n")
 
     print(f"\nReport saved to: {report_path}")
 
