@@ -275,13 +275,13 @@ class COTVisualizer:
             cols=1,
             shared_xaxes=True,
             specs=[[{"secondary_y": True}], [{}], [{}]],
-            vertical_spacing=0.08,
+            vertical_spacing=0.05,
             subplot_titles=(
                 "Net Positions (% of OI)",
                 "Divergence",
                 "Open Interest",
             ),
-            row_heights=[0.45, 0.35, 0.2],
+            row_heights=[0.62, 0.25, 0.13],
         )
 
         # Net positions
@@ -375,7 +375,7 @@ class COTVisualizer:
 
         fig.update_layout(
             title=f"{market} - COT Analysis",
-            height=800,
+            height=1000,
             showlegend=True,
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
             hovermode="x unified",
@@ -383,7 +383,7 @@ class COTVisualizer:
 
         fig.update_yaxes(title_text="% of OI", row=1, col=1)
         fig.update_yaxes(title_text="Price", secondary_y=True, row=1, col=1)
-        fig.update_yaxes(title_text="Divergence %", row=2, col=1)
+        fig.update_yaxes(title_text="Divergence", row=2, col=1)
         fig.update_yaxes(title_text="Contracts", row=3, col=1)
 
         # Add zero line
