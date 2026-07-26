@@ -13,7 +13,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from .config import Config, default_config, get_enabled_contracts, get_key_markets
-from .prices import price_fetcher
+from .prices import MARKET_TICKERS, price_fetcher
 
 
 class COTVisualizer:
@@ -348,7 +348,7 @@ class COTVisualizer:
                 "Divergence",
                 "Open Interest",
             ),
-            row_heights=[0.62, 0.25, 0.13],
+            row_heights=[0.58, 0.25, 0.17],
         )
 
         # Net positions
@@ -372,6 +372,7 @@ class COTVisualizer:
             market_df["date"].max(),
         )
         if not prices.empty:
+            price_ticker = MARKET_TICKERS.get(market, "n/a")
             # Candlestick overlay retained for possible future reuse:
             # fig.add_trace(
             #     go.Candlestick(
@@ -380,7 +381,7 @@ class COTVisualizer:
             #         high=prices["high"],
             #         low=prices["low"],
             #         close=prices["close"],
-            #         name="Price",
+            #         name=f"Price ({price_ticker})",
             #         increasing_line_color="#16803c",
             #         decreasing_line_color="#c0392b",
             #     ),
@@ -392,9 +393,9 @@ class COTVisualizer:
                 go.Scatter(
                     x=prices["date"],
                     y=prices["close"],
-                    name="Price",
+                    name=f"Price ({price_ticker})",
                     line=dict(color="black", width=1.5),
-                    hovertemplate="%{y:,.4g}<extra>Price</extra>",
+                    hovertemplate=f"%{{y:,.4g}}<extra>Price ({price_ticker})</extra>",
                 ),
                 row=1,
                 col=1,
@@ -465,7 +466,8 @@ class COTVisualizer:
         )
 
         fig.update_yaxes(title_text="% of OI", row=1, col=1)
-        fig.update_yaxes(title_text="Price", secondary_y=True, row=1, col=1)
+        price_ticker = MARKET_TICKERS.get(market, "n/a")
+        fig.update_yaxes(title_text=f"Price ({price_ticker})", secondary_y=True, row=1, col=1)
         fig.update_yaxes(title_text="Divergence", row=2, col=1)
         fig.update_yaxes(title_text="Contracts", row=3, col=1)
 
