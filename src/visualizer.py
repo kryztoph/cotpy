@@ -28,7 +28,12 @@ class COTVisualizer:
         plt.style.use("seaborn-v0_8-darkgrid")
         sns.set_palette("husl")
 
-    def _write_branded_html(self, fig: go.Figure, save_path: Path) -> None:
+    def _write_branded_html(
+        self,
+        fig: go.Figure,
+        save_path: Path,
+        global_tracker: bool = False,
+    ) -> None:
         """Write a self-contained Plotly page with CSFox branding."""
         logo_path = Path("/Users/fox/Private/Projects/csfox/assets/logo.png")
         logo_html = ""
@@ -51,8 +56,40 @@ class COTVisualizer:
 <header class="csfox-header">{logo_html}<span class="csfox-title">CSFox Reports</span></header>
 """
         footer = '<footer class="csfox-footer">© 2026 csfox.com. All rights reserved.</footer>'
+        tracker = ""
+        if global_tracker:
+            tracker = """
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const graph = document.querySelector(".plotly-graph-div");
+    if (!graph) return;
+    const trackerName = "global-hover-tracker";
+    graph.on("plotly_hover", function (event) {
+      if (!event.points || !event.points.length) return;
+      const x = event.points[0].x;
+      const shapes = (graph.layout.shapes || []).filter((shape) => shape.name !== trackerName);
+      shapes.push({
+        name: trackerName,
+        type: "line",
+        xref: "x",
+        yref: "paper",
+        x0: x,
+        x1: x,
+        y0: 0,
+        y1: 1,
+        line: { color: "#111827", width: 1.5, dash: "dot" }
+      });
+      Plotly.relayout(graph, { shapes: shapes });
+    });
+    graph.on("plotly_unhover", function () {
+      const shapes = (graph.layout.shapes || []).filter((shape) => shape.name !== trackerName);
+      Plotly.relayout(graph, { shapes: shapes });
+    });
+  });
+</script>
+"""
         html = html.replace("<body>", f"<body>{branding}", 1)
-        html = html.replace("</body>", f"{footer}</body>", 1)
+        html = html.replace("</body>", f"{tracker}{footer}</body>", 1)
         save_path.write_text(html, encoding="utf-8")
 
     # =========================================================================
@@ -421,7 +458,7 @@ class COTVisualizer:
         fig.add_hline(y=0, line_dash="dash", line_color="gray", row=2, col=1)
 
         if save_path:
-            self._write_branded_html(fig, save_path)
+            self._write_branded_html(fig, save_path, global_tracker=True)
             print(f"Saved interactive chart to {save_path}")
 
         return fig
