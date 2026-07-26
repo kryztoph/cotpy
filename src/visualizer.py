@@ -93,6 +93,7 @@ class COTVisualizer:
     graph.on("plotly_hover", function (event) {
       if (!event.points || !event.points.length || syncingHover) return;
       const x = event.points[0].x;
+      syncingHover = true;
       const shapes = (graph.layout.shapes || []).filter((shape) => shape.name !== trackerName);
       shapes.push({
         name: trackerName,
@@ -106,11 +107,11 @@ class COTVisualizer:
         line: { color: "#111827", width: 1.5, dash: "dot" }
       });
       Plotly.relayout(graph, { shapes: shapes });
-      syncingHover = true;
       Plotly.Fx.hover(graph, pointsAt(x));
-      window.setTimeout(function () { syncingHover = false; }, 0);
+      window.setTimeout(function () { syncingHover = false; }, 100);
     });
     graph.on("plotly_unhover", function () {
+      if (syncingHover) return;
       const shapes = (graph.layout.shapes || []).filter((shape) => shape.name !== trackerName);
       Plotly.relayout(graph, { shapes: shapes });
     });
