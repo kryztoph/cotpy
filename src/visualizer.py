@@ -374,12 +374,11 @@ class COTVisualizer:
 
         # Open Interest
         fig.add_trace(
-            go.Scatter(
+            go.Bar(
                 x=market_df["date"],
                 y=market_df["open_interest"],
                 name="Open Interest",
-                fill="tozeroy",
-                line=dict(color="purple", width=1),
+                marker_color="rgba(128, 0, 128, 0.65)",
                 hovertemplate="%{y:,.0f}<extra>Open Interest</extra>",
             ),
             row=3,
@@ -391,15 +390,31 @@ class COTVisualizer:
             height=1000,
             showlegend=True,
             legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01),
-            # Keep each panel's hover readout focused on its own series;
-            # unified hover repeats the top-panel data over divergence bars.
-            hovermode="closest",
+            # Show every series at the same date and draw a shared vertical
+            # tracker across all three panels.
+            hovermode="x unified",
+            spikedistance=-1,
+            hoverdistance=-1,
         )
 
         fig.update_yaxes(title_text="% of OI", row=1, col=1)
         fig.update_yaxes(title_text="Price", secondary_y=True, row=1, col=1)
         fig.update_yaxes(title_text="Divergence", row=2, col=1)
         fig.update_yaxes(title_text="Contracts", row=3, col=1)
+
+        for axis in ("xaxis", "xaxis2", "xaxis3"):
+            fig.update_layout(
+                **{
+                    axis: dict(
+                        showspikes=True,
+                        spikemode="across",
+                        spikesnap="cursor",
+                        spikethickness=1,
+                        spikecolor="#374151",
+                        spikedash="dot",
+                    )
+                }
+            )
 
         # Add zero line
         fig.add_hline(y=0, line_dash="dash", line_color="gray", row=1, col=1)
