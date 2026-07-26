@@ -64,36 +64,10 @@ class COTVisualizer:
     const graph = document.querySelector(".plotly-graph-div");
     if (!graph) return;
     const trackerName = "global-hover-tracker";
-    let syncingHover = false;
-
-    function timeNumber(value) {
-      const parsed = new Date(value).getTime();
-      return Number.isNaN(parsed) ? Number(value) : parsed;
-    }
-
-    function pointsAt(x) {
-      const target = timeNumber(x);
-      const points = [];
-      graph.data.forEach(function (trace, curveNumber) {
-        if (!trace.x || !trace.y) return;
-        let bestIndex = -1;
-        let bestDistance = Infinity;
-        trace.x.forEach(function (pointX, index) {
-          const distance = Math.abs(timeNumber(pointX) - target);
-          if (distance < bestDistance) {
-            bestDistance = distance;
-            bestIndex = index;
-          }
-        });
-        if (bestIndex >= 0) points.push({curveNumber: curveNumber, pointNumber: bestIndex});
-      });
-      return points;
-    }
 
     graph.on("plotly_hover", function (event) {
-      if (!event.points || !event.points.length || syncingHover) return;
+      if (!event.points || !event.points.length) return;
       const x = event.points[0].x;
-      syncingHover = true;
       const shapes = (graph.layout.shapes || []).filter((shape) => shape.name !== trackerName);
       shapes.push({
         name: trackerName,
@@ -107,11 +81,8 @@ class COTVisualizer:
         line: { color: "#111827", width: 1.5, dash: "dot" }
       });
       Plotly.relayout(graph, { shapes: shapes });
-      Plotly.Fx.hover(graph, pointsAt(x));
-      window.setTimeout(function () { syncingHover = false; }, 100);
     });
     graph.on("plotly_unhover", function () {
-      if (syncingHover) return;
       const shapes = (graph.layout.shapes || []).filter((shape) => shape.name !== trackerName);
       Plotly.relayout(graph, { shapes: shapes });
     });
