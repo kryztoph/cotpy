@@ -7,6 +7,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
@@ -37,6 +38,8 @@ DASHBOARD = Path("output/charts/dashboard.html")
 def main() -> int:
     os.chdir(PROJECT_DIR)
     repo = _repo_name()
+    user = _gh_json("user")
+    print(f"authenticated GitHub user: {user.get('login', '<unknown>')}")
     files = _publish_files()
     generated = _index_html(files)
     generated["index.html"] = _site_index()
@@ -219,11 +222,43 @@ def _gh_json(endpoint: str, method: str = "GET", body: dict[str, object] | None 
     if body is not None:
         cmd.extend(["--input", "-"])
         input_data = json.dumps(body).encode("utf-8")
-    completed = subprocess.run(cmd, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
-    if completed.returncode != 0:
-        sys.stderr.write(completed.stderr.decode("utf-8", errors="replace"))
-        raise RuntimeError(f"gh api failed: {' '.join(cmd)}")
-    return json.loads(completed.stdout.decode("utf-8"))
+
+    last_error = ""
+    for attempt in range(1, 4):
+        completed = subprocess.run(
+            cmd,
+            input=input_data,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if completed.returncode == 0:
+            return json.loads(completed.stdout.decode("utf-8"))
+
+        last_error = completed.stderr.decode("utf-8", errors="replace").strip()
+        transient = any(
+            marker in last_error.lower()
+            for marker in (
+                "connection reset",
+                "timed out",
+                "timeout",
+                "temporary failure",
+                "bad gateway",
+                "service unavailable",
+                "502",
+                "503",
+                "504",
+            )
+        )
+        if not transient or attempt == 3:
+            break
+        delay = 2 ** (attempt - 1)
+        print(f"GitHub API transient failure; retrying in {delay}s ({attempt}/3)", file=sys.stderr)
+        time.sleep(delay)
+
+    if last_error:
+        sys.stderr.write(last_error + "\\n")
+    raise RuntimeError(f"gh api failed after 3 attempts: {' '.join(cmd)}")
 
 
 def _gh_command() -> str:
