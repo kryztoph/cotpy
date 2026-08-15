@@ -28,6 +28,20 @@ class COTVisualizer:
         plt.style.use("seaborn-v0_8-darkgrid")
         sns.set_palette("husl")
 
+    @staticmethod
+    def _divergence_bar_colors(divergence: pd.Series) -> list[str]:
+        """Color the single largest absolute divergence gold.
+
+        Positive and negative divergences retain their directional colors; in
+        the unlikely event of a tie, the earliest occurrence is highlighted.
+        """
+        values = pd.to_numeric(divergence, errors="coerce")
+        colors = ["green" if value > 0 else "red" for value in values]
+        if values.notna().any():
+            largest_index = values.abs().idxmax()
+            colors[values.index.get_loc(largest_index)] = "#D4AF37"
+        return colors
+
     def _write_branded_html(
         self,
         fig: go.Figure,
@@ -44,10 +58,12 @@ class COTVisualizer:
                 f'src="data:image/png;base64,{encoded}" alt="CSFox">'
             )
 
-        html = fig.to_html(full_html=True)
+        html = fig.to_html(full_html=True, config={"responsive": True})
         branding = f"""
 <style>
-  body {{ margin: 0; font-family: Arial, sans-serif; }}
+  html, body {{ margin: 0; max-width: 100%; overflow-x: hidden; font-family: Arial, sans-serif; }}
+  *, *::before, *::after {{ box-sizing: border-box; }}
+  .plotly-graph-div {{ width: 100% !important; max-width: 100%; }}
   .csfox-header {{ display: flex; align-items: center; gap: 12px; padding: 10px 18px 0; }}
   .csfox-logo {{ width: 72px; height: 38px; object-fit: contain; }}
   .csfox-title {{ font-size: 18px; font-weight: 600; color: #172554; }}
@@ -89,6 +105,12 @@ class COTVisualizer:
   });
 </script>
 """
+        html = html.replace(
+            '<meta charset="utf-8" />',
+            '<meta charset="utf-8" />\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1" />',
+            1,
+        )
         html = html.replace("<body>", f"<body>{branding}", 1)
         html = html.replace("</body>", f"{tracker}{footer}</body>", 1)
         save_path.write_text(html, encoding="utf-8")
@@ -154,7 +176,7 @@ class COTVisualizer:
         # Bottom: Divergence
         ax2 = axes[1]
         divergence = market_df["divergence"] * 100
-        colors = ["green" if d > 0 else "red" for d in divergence]
+        colors = self._divergence_bar_colors(divergence)
         ax2.bar(market_df["date"], divergence, color=colors, alpha=0.7, width=5)
         ax2.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
         ax2.set_ylabel("Divergence (%)")
@@ -396,9 +418,7 @@ class COTVisualizer:
         )
 
         # Divergence
-        colors = [
-            "green" if d > 0 else "red" for d in market_df["divergence"]
-        ]
+        colors = self._divergence_bar_colors(market_df["divergence"])
         fig.add_trace(
             go.Bar(
                 x=market_df["date"],
@@ -546,31 +566,31 @@ class COTVisualizer:
         safe_name = market.replace("/", "_").replace(" ", "_")
         return f"{safe_name}_interactive.html"
 
-    def _signal_label(self, divergence_percentile: float) -> str:
-        """Translate divergence percentile into a dashboard-friendly label."""
-        if divergence_percentile >= 90:
-            return "Strong Bullish"
-        if divergence_percentile >= 75:
-            return "Lean Bullish"
-        if divergence_percentile <= 10:
-            return "Strong Bearish"
-        if divergence_percentile <= 25:
-            return "Lean Bearish"
-        return "Neutral"
+    @staticmethod
+    def _signal_label(signal: str, strength: str) -> str:
+        """Return the same human-readable classification used by signal counts."""
+        if signal not in {"BULLISH", "BEARISH"}:
+            return "Neutral"
+        return f"{strength.title()} {signal.title()}"
 
-    def _signal_color(self, divergence_percentile: float) -> str:
-        """Return a cell color for the signal label."""
-        if divergence_percentile >= 90:
-            return "rgba(30, 132, 73, 0.22)"
-        if divergence_percentile >= 75:
-            return "rgba(88, 214, 141, 0.18)"
-        if divergence_percentile <= 10:
-            return "rgba(192, 57, 43, 0.22)"
-        if divergence_percentile <= 25:
-            return "rgba(236, 112, 99, 0.18)"
-        return "rgba(215, 219, 221, 0.22)"
+    @staticmethod
+    def _signal_color(signal: str, strength: str) -> str:
+        """Return a cell color for an evaluated signal."""
+        colors = {
+            ("BULLISH", "STRONG"): "rgba(30, 132, 73, 0.22)",
+            ("BULLISH", "MODERATE"): "rgba(88, 214, 141, 0.18)",
+            ("BULLISH", "WEAK"): "rgba(88, 214, 141, 0.10)",
+            ("BEARISH", "STRONG"): "rgba(192, 57, 43, 0.22)",
+            ("BEARISH", "MODERATE"): "rgba(236, 112, 99, 0.18)",
+            ("BEARISH", "WEAK"): "rgba(236, 112, 99, 0.10)",
+        }
+        return colors.get((signal, strength), "rgba(215, 219, 221, 0.22)")
 
-    def _latest_with_drilldown_fields(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _latest_with_drilldown_fields(
+        self,
+        df: pd.DataFrame,
+        signals_df: pd.DataFrame,
+    ) -> pd.DataFrame:
         """Build latest market rows with category, key-market, and change fields."""
         sorted_df = df.sort_values(["market", "date"]).copy()
         latest = sorted_df.groupby("market", as_index=False).tail(1).reset_index(drop=True)
@@ -598,8 +618,20 @@ class COTVisualizer:
         latest["category"] = latest["market"].map(category_by_market).fillna("other")
         latest["category_label"] = latest["category"].str.replace("_", " ").str.title()
         latest["is_key_market"] = latest["market"].isin(key_markets)
-        latest["signal_label"] = latest["divergence_percentile"].apply(self._signal_label)
-        latest["signal_color"] = latest["divergence_percentile"].apply(self._signal_color)
+
+        signal_rows = signals_df.drop_duplicates("market", keep="last")
+        signal_by_market = signal_rows.set_index("market")["signal"]
+        strength_by_market = signal_rows.set_index("market")["strength"]
+        latest["signal"] = latest["market"].map(signal_by_market).fillna("NEUTRAL")
+        latest["strength"] = latest["market"].map(strength_by_market).fillna("")
+        latest["signal_label"] = [
+            self._signal_label(signal, strength)
+            for signal, strength in zip(latest["signal"], latest["strength"])
+        ]
+        latest["signal_color"] = [
+            self._signal_color(signal, strength)
+            for signal, strength in zip(latest["signal"], latest["strength"])
+        ]
         latest["divergence_change_4w"] = latest["market"].map(changes)
         latest["intent_score"] = latest["divergence_percentile"] - 50
         latest["chart_link"] = latest["market"].apply(
@@ -628,33 +660,13 @@ class COTVisualizer:
         Returns:
             Plotly Figure object
         """
-        latest = self._latest_with_drilldown_fields(df)
+        latest = self._latest_with_drilldown_fields(df, signals_df)
         most_recent = latest["date"].max()
 
-        strong_bull = len(
-            signals_df[
-                (signals_df["signal"] == "BULLISH")
-                & (signals_df["strength"] == "STRONG")
-            ]
-        ) if not signals_df.empty else 0
-        strong_bear = len(
-            signals_df[
-                (signals_df["signal"] == "BEARISH")
-                & (signals_df["strength"] == "STRONG")
-            ]
-        ) if not signals_df.empty else 0
-        moderate_bull = len(
-            signals_df[
-                (signals_df["signal"] == "BULLISH")
-                & (signals_df["strength"] == "MODERATE")
-            ]
-        ) if not signals_df.empty else 0
-        moderate_bear = len(
-            signals_df[
-                (signals_df["signal"] == "BEARISH")
-                & (signals_df["strength"] == "MODERATE")
-            ]
-        ) if not signals_df.empty else 0
+        strong_bull = int((latest["signal_label"] == "Strong Bullish").sum())
+        strong_bear = int((latest["signal_label"] == "Strong Bearish").sum())
+        moderate_bull = int((latest["signal_label"] == "Moderate Bullish").sum())
+        moderate_bear = int((latest["signal_label"] == "Moderate Bearish").sum())
 
         key_table = latest[latest["is_key_market"]].copy()
         key_table = key_table.sort_values("divergence_percentile", ascending=False)
@@ -672,44 +684,42 @@ class COTVisualizer:
         ).copy()
 
         fig = make_subplots(
-            rows=4,
-            cols=4,
+            rows=6,
+            cols=2,
             specs=[
                 [
                     {"type": "domain"},
                     {"type": "domain"},
-                    {"type": "domain"},
-                    {"type": "domain"},
                 ],
                 [
-                    {"type": "scatter", "colspan": 2},
-                    None,
-                    {"type": "table", "colspan": 2},
-                    None,
+                    {"type": "domain"},
+                    {"type": "domain"},
                 ],
-                [{"type": "bar", "colspan": 4}, None, None, None],
-                [{"type": "table", "colspan": 4}, None, None, None],
+                [{"type": "scatter", "colspan": 2}, None],
+                [{"type": "table", "colspan": 2}, None],
+                [{"type": "bar", "colspan": 2}, None],
+                [{"type": "table", "colspan": 2}, None],
             ],
             subplot_titles=(
-                "Strong Bullish",
-                "Strong Bearish",
-                "Moderate Bullish",
-                "Moderate Bearish",
+                "Strong<br>Bullish",
+                "Strong<br>Bearish",
+                "Moderate<br>Bullish",
+                "Moderate<br>Bearish",
                 "Positioning Map",
                 "Key Markets",
                 "Bullish and Bearish Extremes",
                 "Category Drill Down",
             ),
-            vertical_spacing=0.08,
-            horizontal_spacing=0.06,
-            row_heights=[0.13, 0.32, 0.23, 0.32],
+            vertical_spacing=0.025,
+            horizontal_spacing=0.08,
+            row_heights=[0.045, 0.045, 0.16, 0.25, 0.17, 0.33],
         )
 
-        for col, value, color in [
-            (1, strong_bull, "#1e8449"),
-            (2, strong_bear, "#c0392b"),
-            (3, moderate_bull, "#58d68d"),
-            (4, moderate_bear, "#ec7063"),
+        for row, col, value, color in [
+            (1, 1, strong_bull, "#1e8449"),
+            (1, 2, strong_bear, "#c0392b"),
+            (2, 1, moderate_bull, "#58d68d"),
+            (2, 2, moderate_bear, "#ec7063"),
         ]:
             fig.add_trace(
                 go.Indicator(
@@ -717,7 +727,7 @@ class COTVisualizer:
                     value=value,
                     number=dict(font=dict(size=34, color=color)),
                 ),
-                row=1,
+                row=row,
                 col=col,
             )
 
@@ -736,11 +746,11 @@ class COTVisualizer:
                         color=np.where(latest["is_key_market"], "#111111", "#777777"),
                     ),
                     colorbar=dict(
-                        title="Div %ile",
-                        x=0.47,
+                        title="Div<br>%ile",
+                        x=0.92,
                         thickness=15,
-                        len=0.26,
-                        y=0.66,
+                        len=0.16,
+                        y=0.70,
                     ),
                 ),
                 text=latest["market"],
@@ -763,7 +773,7 @@ class COTVisualizer:
                     "4w Change: %{customdata[3]:+.0f}<extra></extra>"
                 ),
             ),
-            row=2,
+            row=3,
             col=1,
         )
         fig.add_shape(
@@ -787,18 +797,15 @@ class COTVisualizer:
             line=dict(color="gray", dash="dash"),
         )
 
-        key_colors = [key_table["signal_color"].tolist()] * 6
+        key_colors = [key_table["signal_color"].tolist()] * 3
         fig.add_trace(
             go.Table(
-                columnwidth=[2.2, 1.2, 1.0, 1.0, 1.0, 0.9],
+                columnwidth=[2.3, 1.4, 0.8],
                 header=dict(
                     values=[
                         "Market",
                         "Signal",
                         "Div %ile",
-                        "4w Chg",
-                        "Comm %",
-                        "Spec %",
                     ],
                     fill_color="#e5e7eb",
                     align="left",
@@ -809,11 +816,6 @@ class COTVisualizer:
                         key_table["chart_link"],
                         key_table["signal_label"],
                         key_table["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
-                        key_table["divergence_change_4w"].apply(
-                            lambda x: "n/a" if pd.isna(x) else f"{x:+.0f}"
-                        ),
-                        key_table["commercial_net_pct"].apply(lambda x: f"{x:+.1%}"),
-                        key_table["small_spec_net_pct"].apply(lambda x: f"{x:+.1%}"),
                     ],
                     fill_color=key_colors,
                     align="left",
@@ -821,8 +823,8 @@ class COTVisualizer:
                     font=dict(size=11),
                 ),
             ),
-            row=2,
-            col=3,
+            row=4,
+            col=1,
         )
 
         bar_colors = np.where(extremes["intent_score"] >= 0, "#1e8449", "#c0392b")
@@ -849,7 +851,7 @@ class COTVisualizer:
                     "4w Change: %{customdata[2]:+.0f}<extra></extra>"
                 ),
             ),
-            row=3,
+            row=5,
             col=1,
         )
         fig.add_shape(
@@ -910,7 +912,7 @@ class COTVisualizer:
                     font=dict(size=11),
                 ),
             ),
-            row=4,
+            row=6,
             col=1,
         )
 
@@ -951,12 +953,13 @@ class COTVisualizer:
             title=(
                 "COT Analysis Dashboard"
                 f"<br><sup>Data as of {most_recent:%Y-%m-%d}; "
-                f"{len(latest)} markets analyzed. Click market names in tables "
-                "to open individual interactive charts when generated.</sup>"
+                f"{len(latest)} markets analyzed.<br>Market names link to "
+                "interactive charts.</sup>"
             ),
-            height=1550,
+            height=3400,
+            autosize=True,
             showlegend=False,
-            margin=dict(l=40, r=40, t=110, b=40),
+            margin=dict(l=28, r=28, t=205, b=40),
             updatemenus=[
                 dict(
                     buttons=drilldown_buttons,
@@ -969,6 +972,14 @@ class COTVisualizer:
                 )
             ],
         )
+        for annotation in fig.layout.annotations:
+            if annotation.text in {
+                "Strong<br>Bullish",
+                "Strong<br>Bearish",
+                "Moderate<br>Bullish",
+                "Moderate<br>Bearish",
+            }:
+                annotation.font = dict(size=14)
         fig.add_annotation(
             text="Sort drill down:",
             x=0,
@@ -981,9 +992,14 @@ class COTVisualizer:
             font=dict(size=12),
         )
 
-        fig.update_xaxes(title_text="Commercial Net %", row=2, col=1)
-        fig.update_yaxes(title_text="Small Spec Net %", row=2, col=1)
-        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=3, col=1)
+        fig.update_xaxes(
+            title_text="Commercial Net %",
+            domain=[0, 0.88],
+            row=3,
+            col=1,
+        )
+        fig.update_yaxes(title_text="Small Spec Net %", row=3, col=1)
+        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=5, col=1)
         fig.update_yaxes(
             automargin=True,
             categoryorder="array",
@@ -991,7 +1007,7 @@ class COTVisualizer:
             tickmode="array",
             tickvals=extremes_markets,
             ticktext=extremes_markets,
-            row=3,
+            row=5,
             col=1,
         )
 
