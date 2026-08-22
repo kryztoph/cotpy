@@ -4,6 +4,7 @@ from pathlib import Path
 from typing import Optional
 from html import escape
 import base64
+import json
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -30,16 +31,21 @@ class COTVisualizer:
 
     @staticmethod
     def _divergence_bar_colors(divergence: pd.Series) -> list[str]:
-        """Color the single largest absolute divergence gold.
+        """Color the largest positive and negative divergences gold.
 
-        Positive and negative divergences retain their directional colors; in
-        the unlikely event of a tie, the earliest occurrence is highlighted.
+        Positive and negative divergences retain their directional colors. The
+        largest positive and largest negative bars are each highlighted; ties
+        resolve to the earliest occurrence for each direction.
         """
         values = pd.to_numeric(divergence, errors="coerce")
         colors = ["green" if value > 0 else "red" for value in values]
-        if values.notna().any():
-            largest_index = values.abs().idxmax()
-            colors[values.index.get_loc(largest_index)] = "#D4AF37"
+        positive_values = values[values > 0]
+        negative_values = values[values < 0]
+        for directional_values in (positive_values, negative_values):
+            if directional_values.empty:
+                continue
+            extreme_index = directional_values.idxmax()
+            colors[values.index.get_loc(extreme_index)] = "#D4AF37"
         return colors
 
     def _write_branded_html(
@@ -47,6 +53,8 @@ class COTVisualizer:
         fig: go.Figure,
         save_path: Path,
         global_tracker: bool = False,
+        point_links: bool = False,
+        dashboard_sort_payload: Optional[dict] = None,
     ) -> None:
         """Write a self-contained Plotly page with CSFox branding."""
         logo_path = Path("/Users/fox/Private/Projects/csfox/assets/logo.png")
@@ -67,6 +75,10 @@ class COTVisualizer:
   .csfox-header {{ display: flex; align-items: center; gap: 12px; padding: 10px 18px 0; }}
   .csfox-logo {{ width: 72px; height: 38px; object-fit: contain; }}
   .csfox-title {{ font-size: 18px; font-weight: 600; color: #172554; }}
+  .dashboard-sort-controls {{ display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 18px 2px; }}
+  .dashboard-sort-controls span {{ color: #475569; font-size: 12px; font-weight: 600; margin-right: 2px; }}
+  .dashboard-sort-controls button {{ appearance: none; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff; color: #1e3a5f; cursor: pointer; font-size: 12px; padding: 4px 7px; }}
+  .dashboard-sort-controls button:hover, .dashboard-sort-controls button[aria-pressed="true"] {{ background: #e0f2fe; border-color: #0ea5e9; }}
   .csfox-footer {{ padding: 8px 18px 14px; color: #6b7280; font-size: 11px; text-align: center; }}
 </style>
 <header class="csfox-header">{logo_html}<span class="csfox-title">CSFox Reports</span></header>
@@ -105,6 +117,90 @@ class COTVisualizer:
   });
 </script>
 """
+        point_linker = ""
+        if point_links:
+            point_linker = """
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const graph = document.querySelector(".plotly-graph-div");
+    if (!graph) return;
+
+    function chartHref(point) {
+      const values = point && point.customdata;
+      if (!Array.isArray(values)) return null;
+      const href = values[4];
+      return typeof href === "string" && /^[^:/?#]+_interactive\\.html$/.test(href)
+        ? href
+        : null;
+    }
+
+    graph.on("plotly_hover", function (event) {
+      const point = event.points && event.points[0];
+      graph.style.cursor = chartHref(point) ? "pointer" : "default";
+    });
+    graph.on("plotly_unhover", function () {
+      graph.style.cursor = "default";
+    });
+    graph.on("plotly_click", function (event) {
+      const point = event.points && event.points[0];
+      const href = chartHref(point);
+      if (href) window.location.assign(href);
+    });
+  });
+</script>
+"""
+        sort_controls = ""
+        if dashboard_sort_payload:
+            buttons = "".join(
+                (
+                    '<button type="button" data-sort-key="'
+                    f'{escape(key, quote=True)}" data-sort-label="{escape(option["label"], quote=True)}">'
+                    f'{escape(option["label"])} ↕</button>'
+                )
+                for key, option in dashboard_sort_payload.items()
+            )
+            payload = json.dumps(dashboard_sort_payload).replace("<", "\\u003c")
+            sort_controls = f"""
+<section class="dashboard-sort-controls" aria-label="Category drill-down sorting">
+  <span>Sort category drill-down:</span>{buttons}
+</section>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {{
+    const graph = document.querySelector(".plotly-graph-div");
+    const options = {payload};
+    let activeKey = "category";
+    let activeDirection = "asc";
+
+    function renderButtons() {{
+      document.querySelectorAll("[data-sort-key]").forEach(function (button) {{
+        const active = button.dataset.sortKey === activeKey;
+        button.setAttribute("aria-pressed", String(active));
+        button.textContent = button.dataset.sortLabel + (active ? (activeDirection === "asc" ? " ▲" : " ▼") : " ↕");
+      }});
+    }}
+
+    document.querySelectorAll("[data-sort-key]").forEach(function (button) {{
+      button.addEventListener("click", function () {{
+        const key = button.dataset.sortKey;
+        const option = options[key];
+        if (!graph || !option) return;
+        const direction = key === activeKey && activeDirection === "asc"
+          ? "desc"
+          : (key === activeKey ? "asc" : option.default_direction);
+        const values = option.directions[direction];
+        Plotly.restyle(graph, {{
+          "cells.values": [values.cells_values],
+          "cells.fill.color": [values.cells_fill_color]
+        }}, [option.trace_index]);
+        activeKey = key;
+        activeDirection = direction;
+        renderButtons();
+      }});
+    }});
+    renderButtons();
+  }});
+</script>
+"""
         html = html.replace(
             '<meta charset="utf-8" />',
             '<meta charset="utf-8" />\n'
@@ -112,7 +208,13 @@ class COTVisualizer:
             1,
         )
         html = html.replace("<body>", f"<body>{branding}", 1)
-        html = html.replace("</body>", f"{tracker}{footer}</body>", 1)
+        if sort_controls:
+            html = html.replace("</header>", f"</header>{sort_controls}", 1)
+        html = html.replace(
+            "</body>",
+            f"{tracker}{point_linker}{footer}</body>",
+            1,
+        )
         save_path.write_text(html, encoding="utf-8")
 
     # =========================================================================
@@ -636,10 +738,11 @@ class COTVisualizer:
         latest["intent_score"] = latest["divergence_percentile"] - 50
         latest["chart_link"] = latest["market"].apply(
             lambda market: (
-                f'<a href="{escape(self._interactive_chart_filename(market))}">'
+                f'<a href="{escape(self._interactive_chart_filename(market))}" target="_self">'
                 f'{escape(market)}</a>'
             )
         )
+        latest["chart_url"] = latest["market"].apply(self._interactive_chart_filename)
 
         return latest
 
@@ -663,11 +766,6 @@ class COTVisualizer:
         latest = self._latest_with_drilldown_fields(df, signals_df)
         most_recent = latest["date"].max()
 
-        strong_bull = int((latest["signal_label"] == "Strong Bullish").sum())
-        strong_bear = int((latest["signal_label"] == "Strong Bearish").sum())
-        moderate_bull = int((latest["signal_label"] == "Moderate Bullish").sum())
-        moderate_bear = int((latest["signal_label"] == "Moderate Bearish").sum())
-
         key_table = latest[latest["is_key_market"]].copy()
         key_table = key_table.sort_values("divergence_percentile", ascending=False)
 
@@ -684,52 +782,24 @@ class COTVisualizer:
         ).copy()
 
         fig = make_subplots(
-            rows=6,
+            rows=4,
             cols=2,
             specs=[
-                [
-                    {"type": "domain"},
-                    {"type": "domain"},
-                ],
-                [
-                    {"type": "domain"},
-                    {"type": "domain"},
-                ],
+                [{"type": "table", "colspan": 2}, None],
                 [{"type": "scatter", "colspan": 2}, None],
                 [{"type": "table", "colspan": 2}, None],
                 [{"type": "bar", "colspan": 2}, None],
-                [{"type": "table", "colspan": 2}, None],
             ],
             subplot_titles=(
-                "Strong<br>Bullish",
-                "Strong<br>Bearish",
-                "Moderate<br>Bullish",
-                "Moderate<br>Bearish",
+                "Category Drill Down",
                 "Positioning Map",
                 "Key Markets",
                 "Bullish and Bearish Extremes",
-                "Category Drill Down",
             ),
             vertical_spacing=0.025,
             horizontal_spacing=0.08,
-            row_heights=[0.045, 0.045, 0.16, 0.25, 0.17, 0.33],
+            row_heights=[0.38, 0.20, 0.22, 0.20],
         )
-
-        for row, col, value, color in [
-            (1, 1, strong_bull, "#1e8449"),
-            (1, 2, strong_bear, "#c0392b"),
-            (2, 1, moderate_bull, "#58d68d"),
-            (2, 2, moderate_bear, "#ec7063"),
-        ]:
-            fig.add_trace(
-                go.Indicator(
-                    mode="number",
-                    value=value,
-                    number=dict(font=dict(size=34, color=color)),
-                ),
-                row=row,
-                col=col,
-            )
 
         fig.add_trace(
             go.Scatter(
@@ -749,8 +819,8 @@ class COTVisualizer:
                         title="Div<br>%ile",
                         x=0.92,
                         thickness=15,
-                        len=0.16,
-                        y=0.70,
+                        len=0.14,
+                        y=0.53,
                     ),
                 ),
                 text=latest["market"],
@@ -760,6 +830,7 @@ class COTVisualizer:
                         latest["signal_label"],
                         latest["divergence_percentile"],
                         latest["divergence_change_4w"].fillna(0),
+                        latest["chart_url"],
                     ],
                     axis=-1,
                 ),
@@ -770,10 +841,11 @@ class COTVisualizer:
                     "Comm Net: %{x:.1f}%<br>"
                     "Small Spec Net: %{y:.1f}%<br>"
                     "Div %ile: %{customdata[2]:.0f}<br>"
-                    "4w Change: %{customdata[3]:+.0f}<extra></extra>"
+                    "4w Change: %{customdata[3]:+.0f}<br>"
+                    "<b>Click to open chart</b><extra></extra>"
                 ),
             ),
-            row=3,
+            row=2,
             col=1,
         )
         fig.add_shape(
@@ -823,7 +895,7 @@ class COTVisualizer:
                     font=dict(size=11),
                 ),
             ),
-            row=4,
+            row=3,
             col=1,
         )
 
@@ -851,7 +923,7 @@ class COTVisualizer:
                     "4w Change: %{customdata[2]:+.0f}<extra></extra>"
                 ),
             ),
-            row=5,
+            row=4,
             col=1,
         )
         fig.add_shape(
@@ -865,19 +937,19 @@ class COTVisualizer:
             line=dict(color="gray", dash="dash"),
         )
 
-        def drilldown_table_values(table_df: pd.DataFrame) -> list[pd.Series]:
+        def drilldown_table_values(table_df: pd.DataFrame) -> list[list[str]]:
             return [
-                table_df["category_label"],
-                table_df["chart_link"],
-                table_df["signal_label"],
-                table_df["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
+                table_df["category_label"].tolist(),
+                table_df["chart_link"].tolist(),
+                table_df["signal_label"].tolist(),
+                table_df["divergence_percentile"].apply(lambda x: f"{x:.0f}").tolist(),
                 table_df["divergence_change_4w"].apply(
                     lambda x: "n/a" if pd.isna(x) else f"{x:+.0f}"
-                ),
-                table_df["commercial_net_pct"].apply(lambda x: f"{x:+.1%}"),
-                table_df["small_spec_net_pct"].apply(lambda x: f"{x:+.1%}"),
-                table_df["open_interest"].apply(lambda x: f"{x:,.0f}"),
-                table_df["is_key_market"].apply(lambda x: "Yes" if x else ""),
+                ).tolist(),
+                table_df["commercial_net_pct"].apply(lambda x: f"{x:+.1%}").tolist(),
+                table_df["small_spec_net_pct"].apply(lambda x: f"{x:+.1%}").tolist(),
+                table_df["open_interest"].apply(lambda x: f"{x:,.0f}").tolist(),
+                table_df["is_key_market"].apply(lambda x: "Yes" if x else "").tolist(),
             ]
 
         def drilldown_fill_colors(table_df: pd.DataFrame) -> list[list[str]]:
@@ -912,42 +984,40 @@ class COTVisualizer:
                     font=dict(size=11),
                 ),
             ),
-            row=6,
+            row=1,
             col=1,
         )
 
-        drilldown_sort_options = [
-            ("Category", ["category", "divergence_percentile"], [True, False]),
-            ("Market A-Z", ["market"], [True]),
-            ("Div High-Low", ["divergence_percentile"], [False]),
-            ("Div Low-High", ["divergence_percentile"], [True]),
-            ("4w Chg Up", ["divergence_change_4w"], [False]),
-            ("4w Chg Down", ["divergence_change_4w"], [True]),
-            ("Commercial %", ["commercial_net_pct"], [False]),
-            ("Small Spec %", ["small_spec_net_pct"], [False]),
-            ("Open Interest", ["open_interest"], [False]),
-            ("Key First", ["is_key_market", "category", "market"], [False, True, True]),
+        drilldown_sort_specs = [
+            ("category", "Category", ["category", "divergence_percentile"], [False], "asc"),
+            ("market", "Market", ["market"], [], "asc"),
+            ("signal", "Signal", ["signal_label", "market"], [True], "asc"),
+            ("divergence", "Div %ile", ["divergence_percentile"], [], "desc"),
+            ("change", "4w Chg", ["divergence_change_4w"], [], "desc"),
+            ("commercial", "Comm %", ["commercial_net_pct"], [], "desc"),
+            ("small_spec", "Spec %", ["small_spec_net_pct"], [], "desc"),
+            ("open_interest", "OI", ["open_interest"], [], "desc"),
+            ("key", "Key", ["is_key_market", "category", "market"], [True, True], "desc"),
         ]
-        drilldown_buttons = []
-        for label, sort_columns, ascending in drilldown_sort_options:
-            sorted_drilldown = drilldown.sort_values(
-                sort_columns,
-                ascending=ascending,
-                na_position="last",
-            )
-            drilldown_buttons.append(
-                dict(
-                    label=label,
-                    method="restyle",
-                    args=[
-                        {
-                            "cells.values": [drilldown_table_values(sorted_drilldown)],
-                            "cells.fill.color": [drilldown_fill_colors(sorted_drilldown)],
-                        },
-                        [drilldown_trace_index],
-                    ],
+        dashboard_sort_payload = {}
+        for key, label, sort_columns, secondary_ascending, default_direction in drilldown_sort_specs:
+            directions = {}
+            for direction in ("asc", "desc"):
+                sorted_drilldown = drilldown.sort_values(
+                    sort_columns,
+                    ascending=[direction == "asc", *secondary_ascending],
+                    na_position="last",
                 )
-            )
+                directions[direction] = {
+                    "cells_values": drilldown_table_values(sorted_drilldown),
+                    "cells_fill_color": drilldown_fill_colors(sorted_drilldown),
+                }
+            dashboard_sort_payload[key] = {
+                "label": label,
+                "default_direction": default_direction,
+                "directions": directions,
+                "trace_index": drilldown_trace_index,
+            }
 
         fig.update_layout(
             title=(
@@ -956,50 +1026,20 @@ class COTVisualizer:
                 f"{len(latest)} markets analyzed.<br>Market names link to "
                 "interactive charts.</sup>"
             ),
-            height=3400,
+            height=3000,
             autosize=True,
             showlegend=False,
-            margin=dict(l=28, r=28, t=205, b=40),
-            updatemenus=[
-                dict(
-                    buttons=drilldown_buttons,
-                    direction="down",
-                    showactive=True,
-                    x=0,
-                    xanchor="left",
-                    y=0.285,
-                    yanchor="top",
-                )
-            ],
-        )
-        for annotation in fig.layout.annotations:
-            if annotation.text in {
-                "Strong<br>Bullish",
-                "Strong<br>Bearish",
-                "Moderate<br>Bullish",
-                "Moderate<br>Bearish",
-            }:
-                annotation.font = dict(size=14)
-        fig.add_annotation(
-            text="Sort drill down:",
-            x=0,
-            xanchor="left",
-            y=0.306,
-            yanchor="top",
-            xref="paper",
-            yref="paper",
-            showarrow=False,
-            font=dict(size=12),
+            margin=dict(l=28, r=28, t=110, b=40),
         )
 
         fig.update_xaxes(
             title_text="Commercial Net %",
             domain=[0, 0.88],
-            row=3,
+            row=2,
             col=1,
         )
-        fig.update_yaxes(title_text="Small Spec Net %", row=3, col=1)
-        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=5, col=1)
+        fig.update_yaxes(title_text="Small Spec Net %", row=2, col=1)
+        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=4, col=1)
         fig.update_yaxes(
             automargin=True,
             categoryorder="array",
@@ -1007,12 +1047,17 @@ class COTVisualizer:
             tickmode="array",
             tickvals=extremes_markets,
             ticktext=extremes_markets,
-            row=5,
+            row=4,
             col=1,
         )
 
         if save_path:
-            self._write_branded_html(fig, save_path)
+            self._write_branded_html(
+                fig,
+                save_path,
+                point_links=True,
+                dashboard_sort_payload=dashboard_sort_payload,
+            )
             print(f"Saved dashboard to {save_path}")
 
         return fig
