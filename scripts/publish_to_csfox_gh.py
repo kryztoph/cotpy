@@ -2,15 +2,20 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import os
 import shutil
+import ssl
 import subprocess
 import sys
 import time
 from pathlib import Path
 from typing import Any, cast
 from urllib.parse import urlparse
+from urllib.request import urlopen
+
+import certifi
 
 
 PROJECT_DIR = Path(os.environ.get("COTPY_PROJECT_DIR", "/Users/fox/Private/Projects/cotpy"))
@@ -56,10 +61,18 @@ def main() -> int:
     base_commit = cast(dict[str, Any], ref["object"])["sha"]
     commit_data = _gh_json(f"repos/{repo}/git/commits/{base_commit}")
     base_tree = cast(dict[str, Any], commit_data["tree"])["sha"]
+    remote_tree = _gh_json(f"repos/{repo}/git/trees/{base_tree}?recursive=1")
+    if remote_tree.get("truncated"):
+        raise RuntimeError("Remote tree is truncated; cannot safely compare reports")
+    remote_files = {entry["path"]: entry["sha"] for entry in remote_tree["tree"]}
 
     tree_entries = []
     for source, target in files:
-        blob = _create_blob(repo, source.read_bytes())
+        content = source.read_bytes()
+        if remote_files.get(target) == _blob_sha(content):
+            continue
+        print(f"uploading {target} ({len(content):,} bytes)", flush=True)
+        blob = _create_blob(repo, content)
         tree_entries.append(
             {
                 "path": target,
@@ -69,6 +82,8 @@ def main() -> int:
             }
         )
     for target, content in generated.items():
+        if remote_files.get(target) == _blob_sha(content.encode("utf-8")):
+            continue
         blob = _create_blob(repo, content.encode("utf-8"))
         tree_entries.append(
             {
@@ -83,9 +98,11 @@ def main() -> int:
         f"repos/{repo}/git/trees",
         method="POST",
         body={"base_tree": base_tree, "tree": tree_entries},
-    )
+    ) if tree_entries else {"sha": base_tree}
     if tree["sha"] == base_tree:
         print("no cotpy report changes to commit")
+        if TRIGGER_PAGES:
+            _ensure_pages(repo, base_commit)
         return 0
 
     commit = _gh_json(
@@ -103,13 +120,49 @@ def main() -> int:
         body={"sha": commit["sha"], "force": False},
     )
     if TRIGGER_PAGES:
-        try:
-            _gh_json(f"repos/{repo}/pages/builds", method="POST")
-            print("triggered GitHub Pages rebuild")
-        except RuntimeError as exc:
-            print(f"warning: could not trigger GitHub Pages rebuild: {exc}", file=sys.stderr)
+        _ensure_pages(repo, str(commit["sha"]))
     print(f"published cotpy reports to {repo}@{BRANCH}: {commit['sha']}")
     return 0
+
+
+def _blob_sha(content: bytes) -> str:
+    return hashlib.sha1(f"blob {len(content)}\0".encode() + content).hexdigest()
+
+
+def _ensure_pages(repo: str, commit: str) -> None:
+    """Require a successful build of this commit and the actual dashboard bytes."""
+    pages = _gh_json(f"repos/{repo}/pages")
+    source = pages.get("source", {})
+    if source.get("branch") != BRANCH or source.get("path") != "/":
+        raise RuntimeError(f"Unexpected Pages source: {source}")
+    latest = _gh_json(f"repos/{repo}/pages/builds/latest")
+    if latest.get("commit") != commit or latest.get("status") not in {"built", "building", "queued"}:
+        _gh_json(f"repos/{repo}/pages/builds", method="POST")
+        print(f"requested GitHub Pages build for {commit}", flush=True)
+    deadline = time.monotonic() + 900
+    expected = DASHBOARD.read_bytes()
+    url = f"{str(pages['html_url']).rstrip('/')}/{TARGET_PREFIX}/charts/dashboard.html"
+    last_error = "waiting for build"
+    while time.monotonic() < deadline:
+        latest = _gh_json(f"repos/{repo}/pages/builds/latest")
+        if latest.get("commit") == commit:
+            if latest.get("status") == "errored":
+                raise RuntimeError(f"GitHub Pages build failed: {latest.get('error')}")
+            if latest.get("status") == "built":
+                try:
+                    with urlopen(
+                        f"{url}?deployment={commit}", timeout=30,
+                        context=ssl.create_default_context(cafile=certifi.where()),
+                    ) as response:
+                        if response.read() == expected:
+                            print(f"verified live dashboard: {url}", flush=True)
+                            return
+                    last_error = "live dashboard still differs from local report"
+                except OSError as exc:
+                    last_error = str(exc)
+        print(f"waiting for Pages {commit[:12]}: {latest.get('status')}; {last_error}", flush=True)
+        time.sleep(15)
+    raise RuntimeError(f"Pages deployment did not complete within 15 minutes: {last_error}")
 
 
 def _repo_name() -> str:
@@ -224,18 +277,18 @@ def _gh_json(endpoint: str, method: str = "GET", body: dict[str, object] | None 
         input_data = json.dumps(body).encode("utf-8")
 
     last_error = ""
-    for attempt in range(1, 4):
-        completed = subprocess.run(
-            cmd,
-            input=input_data,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-        )
-        if completed.returncode == 0:
-            return json.loads(completed.stdout.decode("utf-8"))
-
-        last_error = completed.stderr.decode("utf-8", errors="replace").strip()
+    attempts = 5
+    for attempt in range(1, attempts + 1):
+        try:
+            completed = subprocess.run(
+                cmd, input=input_data, stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE, check=False, timeout=120,
+            )
+            if completed.returncode == 0:
+                return json.loads(completed.stdout.decode("utf-8"))
+            last_error = completed.stderr.decode("utf-8", errors="replace").strip()
+        except subprocess.TimeoutExpired:
+            last_error = "GitHub API request timed out after 120 seconds"
         transient = any(
             marker in last_error.lower()
             for marker in (
@@ -248,17 +301,29 @@ def _gh_json(endpoint: str, method: str = "GET", body: dict[str, object] | None 
                 "502",
                 "503",
                 "504",
+                "500",
+                "429",
+                "network is down",
+                "network is unreachable",
+                "error connecting",
+                "connection refused",
+                "connection closed",
+                "broken pipe",
+                "eof",
+                "could not resolve",
+                "tls handshake",
+                "please try resubmitting your request",
             )
         )
-        if not transient or attempt == 3:
+        if not transient or attempt == attempts:
             break
-        delay = 2 ** (attempt - 1)
-        print(f"GitHub API transient failure; retrying in {delay}s ({attempt}/3)", file=sys.stderr)
+        delay = min(60, 10 * 2 ** (attempt - 1))
+        print(f"{endpoint}: {last_error}; retrying in {delay}s ({attempt}/{attempts})", file=sys.stderr, flush=True)
         time.sleep(delay)
 
     if last_error:
-        sys.stderr.write(last_error + "\\n")
-    raise RuntimeError(f"gh api failed after 3 attempts: {' '.join(cmd)}")
+        sys.stderr.write(last_error + "\n")
+    raise RuntimeError(f"gh api failed after {attempt} attempt(s): {' '.join(cmd)}")
 
 
 def _gh_command() -> str:

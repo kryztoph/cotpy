@@ -320,6 +320,11 @@ def cmd_market_charts(config: Config):
         markets=markets,
     )
 
+    expected = {"heatmap", "signal_summary", "market_comparison", "dashboard"}
+    expected.update(f"{market}_{kind}" for market in markets for kind in ("static", "interactive"))
+    missing = expected.difference(saved)
+    if missing:
+        raise RuntimeError(f"Incomplete chart generation: {', '.join(sorted(missing))}")
     print(f"Saved {len(saved)} chart artifacts to {config.charts_dir}")
 
 

@@ -6,7 +6,7 @@ This file provides repo-specific guidance for agents working in `cotpy`.
 
 `cotpy` is a Python CLI for analyzing CFTC Commitments of Traders data. The main workflow uses Legacy COT reports to compare commercial hedgers against non-reportable traders ("small specs") and generate contrarian-style signals.
 
-The codebase is small and script-oriented. There is no formal test suite in the repo, so validation is usually done by running the CLI or the report scripts against cached data in `data/`.
+The codebase is small and script-oriented. Publishing and weekly recovery tests run with `.venv/bin/python -m unittest discover -s tests -v`. Analysis validation is usually done by running the CLI or report scripts against cached data in `data/`.
 
 When documentation and code disagree, trust the Python entry points in `main.py`, `report.py`, and `summary_report.py`. `PLAN.md` is historical scaffolding, not the authoritative design.
 
@@ -91,6 +91,7 @@ Detailed flow for `main.py` commands:
 - `report.py`: Generates `output/trade_setup_report.txt`.
 - `summary_report.py`: Generates `output/position_summary.txt` and `output/position_summary.csv`.
 - `scripts/publish_to_csfox.sh`: Publishes generated `output/` reports to `kryztoph/csfox-reports` under `cotpy/` using `gh api`.
+- `scripts/run_cotpy_weekly.py`: Weekly stage orchestration, timeouts, retries, process locking, and status reporting (invoked by the scheduled shell wrapper).
 - `src/config.py`: Config dataclass plus helpers for reading `contracts.json`.
 - `src/fetcher.py`: Downloads yearly zip files from the CFTC and extracts `.txt` payloads into `data/`.
 - `src/parser.py`: Selects CFTC columns, parses dates, normalizes market names, filters to enabled contracts, and computes derived fields.
@@ -167,6 +168,13 @@ Publishing:
 - Set `COTPY_PUBLISH_REPORTS=0` to skip publishing, or run `scripts/publish_to_csfox.sh` manually.
 - The publisher explicitly triggers a GitHub Pages rebuild after updating the reports branch.
 - Published paths live under `cotpy/` in the `csfox-reports` repo.
+- The installed schedule runs Saturday at 7 a.m. and noon. It invokes the shell wrapper directly, so changes to the runner take effect without reloading launchd.
+- Download, report generation, and publishing each get three attempts, with 60-second and 300-second retry delays. Publishing retries do not repeat the completed generation stage within a run.
+- Download attempts allow 40 minutes; each generation command and each publishing attempt allow 60 minutes. Timed-out commands and their child processes are terminated before retrying.
+- `logs/weekly-status.json` records the latest stage, attempt, and error; `logs/weekly.log` contains the complete run output. `logs/weekly.lock` uses an OS lock released automatically when the runner exits or crashes.
+- Every GitHub API call has a 120-second timeout and up to five attempts for transient errors. Unchanged files are identified by Git blob hashes and skipped.
+- Publishing requires a successful Pages build for the target commit and matching live dashboard bytes, allowing 15 minutes for deployment. A no-change rerun still checks/repairs deployment. `COTPY_PUBLISH_TRIGGER_PAGES=0` explicitly disables deployment verification.
+- `--market-charts` fails if any required chart could not be generated, preventing the weekly job from publishing a partially regenerated chart set.
 
 Cached downloads:
 
@@ -178,5 +186,5 @@ Cached downloads:
 - Prefer changing `contracts.json` or `src/config.py` for threshold and market-scope changes before altering analysis logic.
 - If a market "disappears," check contract enablement and name mapping first; parser filtering is often the cause.
 - Network access is required for `--update`; most other validation can run against cached files.
-- Because there are no tests, prefer verifying changes with the smallest relevant command, for example `python main.py --signals` or `python summary_report.py`.
+- Prefer verifying changes with the smallest relevant command, for example `python main.py --signals` or `python summary_report.py`; use the recovery tests for weekly/publishing changes.
 - If you are only editing docs, do not restage or rewrite unrelated `.context/` files; they are workspace metadata, not part of the product.
