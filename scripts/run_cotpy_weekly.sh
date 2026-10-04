@@ -1,58 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PROJECT_DIR="/Users/fox/Private/Projects/cotpy"
-PYTHON="$PROJECT_DIR/.venv/bin/python"
-LOG_DIR="$PROJECT_DIR/logs"
-LOCK_DIR="$PROJECT_DIR/.cotpy-weekly.lock"
-MPLCONFIGDIR="$PROJECT_DIR/.cache/matplotlib"
-PUBLISH_REPORTS="${COTPY_PUBLISH_REPORTS:-1}"
-
-mkdir -p "$LOG_DIR"
-mkdir -p "$MPLCONFIGDIR"
-export MPLCONFIGDIR
-
-if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S %Z') cotpy weekly job already running"
-  exit 0
-fi
-trap 'rmdir "$LOCK_DIR"' EXIT
-
+PROJECT_DIR="${COTPY_PROJECT_DIR:-/Users/fox/Private/Projects/cotpy}"
+PYTHON="${COTPY_PYTHON:-$PROJECT_DIR/.venv/bin/python}"
+mkdir -p "$PROJECT_DIR/logs" "$PROJECT_DIR/.cache/matplotlib"
+export MPLCONFIGDIR="$PROJECT_DIR/.cache/matplotlib"
+export PYTHONUNBUFFERED=1
 cd "$PROJECT_DIR"
-
-{
-  echo "================================================================"
-  echo "$(date '+%Y-%m-%d %H:%M:%S %Z') starting cotpy weekly refresh"
-  echo "Project: $PROJECT_DIR"
-  echo "Python: $PYTHON"
-  echo "================================================================"
-
-  "$PYTHON" main.py --update --force
-
-  current_year="$(date '+%Y')"
-  current_legacy_file="$PROJECT_DIR/data/legacy_${current_year}.txt"
-  current_disaggregated_file="$PROJECT_DIR/data/disaggregated_${current_year}.txt"
-
-  if [ ! -s "$current_legacy_file" ] || [ ! -s "$current_disaggregated_file" ]; then
-    echo "Missing current-year COT files after update: $current_legacy_file or $current_disaggregated_file"
-    exit 1
-  fi
-
-  refreshed_count="$(find "$current_legacy_file" "$current_disaggregated_file" -mtime -1 -print | wc -l | tr -d ' ')"
-  if [ "$refreshed_count" -ne 2 ]; then
-    echo "Current-year COT files were not refreshed in the last 24 hours; refusing to regenerate stale reports"
-    exit 1
-  fi
-
-  "$PYTHON" main.py --analyze --signals --export --market-charts
-  "$PYTHON" report.py
-  "$PYTHON" summary_report.py
-
-  if [ "$PUBLISH_REPORTS" = "1" ]; then
-    ./scripts/publish_to_csfox.sh
-  fi
-
-  echo "================================================================"
-  echo "$(date '+%Y-%m-%d %H:%M:%S %Z') cotpy weekly refresh completed"
-  echo "================================================================"
-} >> "$LOG_DIR/weekly.log" 2>&1
+# Keep unattended network requests moving while the Mac would otherwise idle
+# to sleep. caffeinate releases its assertion when the child exits.
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  exec /usr/bin/caffeinate -i "$PYTHON" scripts/run_cotpy_weekly.py >> "$PROJECT_DIR/logs/weekly.log" 2>&1
+fi
+exec "$PYTHON" scripts/run_cotpy_weekly.py >> "$PROJECT_DIR/logs/weekly.log" 2>&1
