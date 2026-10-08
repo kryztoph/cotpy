@@ -286,6 +286,10 @@ def cmd_dashboard(config: Config):
     df, signals_df = load_and_analyze_data(config)
     visualizer = COTVisualizer(config)
 
+    for market in sorted(df["market"].unique()):
+        chart_path = config.charts_dir / visualizer._interactive_chart_filename(market)
+        visualizer.plot_interactive_positions(df, market, save_path=chart_path)
+
     dashboard_path = config.charts_dir / "dashboard.html"
     visualizer.create_dashboard(df, signals_df, save_path=dashboard_path)
     print(f"\nOpen {dashboard_path} in your browser")

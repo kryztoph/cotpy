@@ -34,7 +34,7 @@ python report.py
 | `--chart MARKET, -c` | Generate charts for a specific market |
 | `--interactive, -i` | Generate interactive Plotly chart (with --chart) |
 | `--export, -e` | Export analysis results to CSV |
-| `--dashboard, -d` | Generate interactive dashboard |
+| `--dashboard, -d` | Generate interactive dashboard and all linked market charts |
 | `--key-charts` | Generate static and interactive charts for all key markets |
 | `--market-charts` | Generate static and interactive charts for all enabled markets |
 | `--list-markets, -l` | List all available markets |
@@ -63,7 +63,7 @@ python main.py --chart "E-MINI S&P 500 STOCK INDEX"
 # Export all data to CSV
 python main.py --export
 
-# Generate interactive dashboard
+# Generate interactive dashboard and its linked market charts
 python main.py --dashboard
 
 # Generate the complete key-market chart set
@@ -328,3 +328,15 @@ cotpy/
 ├── summary_report.py  # Position summary report generator
 └── requirements.txt
 ```
+
+Dashboard navigation regression checks:
+
+```bash
+python -m unittest discover -s tests -v
+# Optional browser checks after generating the dashboard (requires Playwright/Chromium):
+node tests/check_dashboard_links.cjs
+```
+
+The browser check covers local chart navigation, sorting, wrapped link markup,
+and table scrolling. Install Playwright separately as described in the test script;
+set `CHROMIUM_PATH` to reuse an existing Chromium executable.

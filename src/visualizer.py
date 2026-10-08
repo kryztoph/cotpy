@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 from html import escape
+from urllib.parse import quote
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -479,7 +480,7 @@ class COTVisualizer:
         latest["intent_score"] = latest["divergence_percentile"] - 50
         latest["chart_link"] = latest["market"].apply(
             lambda market: (
-                f'<a href="{escape(self._interactive_chart_filename(market))}">'
+                f'<a href="{escape(quote(self._interactive_chart_filename(market), safe=""))}">'
                 f'{escape(market)}</a>'
             )
         )
@@ -871,7 +872,8 @@ class COTVisualizer:
         )
 
         if save_path:
-            fig.write_html(save_path)
+            link_script = Path(__file__).with_name("dashboard_links.js").read_text()
+            fig.write_html(save_path, post_script=link_script)
             print(f"Saved dashboard to {save_path}")
 
         return fig
