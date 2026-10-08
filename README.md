@@ -134,7 +134,7 @@ Report saved to `output/trade_setup_report.txt`
 ## Weekly Automation
 
 This repo includes a macOS LaunchAgent that refreshes CFTC data and regenerates
-all outputs every Saturday at 7:00 AM local time:
+all outputs every Saturday at 7:00 AM and noon local time:
 
 ```bash
 cp launchd/com.fox.cotpy.weekly.plist ~/Library/LaunchAgents/
@@ -147,12 +147,50 @@ The scheduled job runs:
 scripts/run_cotpy_weekly.sh
 ```
 
-The runner uses `main.py --update --force`, verifies the current-year COT files
-were actually refreshed, then regenerates analysis, signals, CSV exports, the
+The runner uses `main.py --update`, which refreshes current-week reports and
+the current-year archives while reusing historical archives. Failed current-week
+downloads return failure instead of silently continuing with cached data.
+The runner verifies that both current-week files were refreshed and contain
+report dates no older than 10 days, then regenerates analysis, signals, CSV exports, the
 dashboard, all static and interactive enabled-market charts, the trade setup report,
 and position summary. By default it then
 publishes the refreshed reports to the `kryztoph/csfox-reports` GitHub Pages
 repo under `cotpy/`. Logs are written to `logs/weekly.log`.
+
+The 10-day freshness limit is an operational guard against publishing last
+week's data, rather than an official release-calendar calculation. For a known
+CFTC release delay, set `COTPY_MAX_REPORT_AGE_DAYS` to a larger positive number.
+Freshness uses weekly report dates, so a late-December report remains valid in
+early January even before the new annual archive is available.
+
+On macOS the wrapper holds a `caffeinate -i` assertion while the job runs.
+This prevents idle sleep from stretching downloads, timeouts, and publishing
+retries across days. It does not wake a sleeping Mac or prevent lid-close sleep;
+the scheduled job still needs the computer available to run.
+
+Download, report generation, and publishing each receive three attempts with
+60-second and 300-second delays. Download commands have a 40-minute timeout;
+each generation command and publish attempt have a 60-minute timeout. The runner
+kills timed-out process groups before retrying. Publishing retries reuse completed
+reports. An OS lock prevents overlapping runs and releases automatically after a
+crash. The latest stage, attempt, and error are recorded in `logs/weekly-status.json`.
+
+GitHub API calls have a 120-second timeout and up to five attempts for transient
+failures. Unchanged report blobs are skipped. Publishing succeeds only after a
+Pages build for the target commit and matching live dashboard bytes are verified;
+unchanged reruns also check deployment. Chart generation fails if any required
+artifact is missing, so partial results cannot be published by the weekly runner.
+
+If replacing an already loaded LaunchAgent, reload it to install the fallback:
+
+```bash
+launchctl bootout "gui/$(id -u)/com.fox.cotpy.weekly"
+cp launchd/com.fox.cotpy.weekly.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.fox.cotpy.weekly.plist
+```
+
+See [the weekly failure investigation](docs/weekly-refresh-investigation.md) for
+observed failures and recovery limits.
 
 Publish reports manually:
 
