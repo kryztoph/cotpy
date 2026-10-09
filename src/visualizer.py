@@ -771,9 +771,6 @@ class COTVisualizer:
         latest = self._latest_with_drilldown_fields(df, signals_df)
         most_recent = latest["date"].max()
 
-        key_table = latest[latest["is_key_market"]].copy()
-        key_table = key_table.sort_values("divergence_percentile", ascending=False)
-
         bullish_extremes = latest.sort_values("divergence_percentile", ascending=False).head(10)
         bearish_extremes = latest.sort_values("divergence_percentile", ascending=True).head(10)
         extremes = pd.concat([bullish_extremes, bearish_extremes])
@@ -787,23 +784,21 @@ class COTVisualizer:
         ).copy()
 
         fig = make_subplots(
-            rows=4,
+            rows=3,
             cols=2,
             specs=[
                 [{"type": "table", "colspan": 2}, None],
                 [{"type": "scatter", "colspan": 2}, None],
-                [{"type": "table", "colspan": 2}, None],
                 [{"type": "bar", "colspan": 2}, None],
             ],
             subplot_titles=(
                 "Category Drill Down",
                 "Positioning Map",
-                "Key Markets",
                 "Bullish and Bearish Extremes",
             ),
             vertical_spacing=0.025,
             horizontal_spacing=0.08,
-            row_heights=[0.38, 0.20, 0.22, 0.20],
+            row_heights=[0.38, 0.31, 0.31],
         )
 
         fig.add_trace(
@@ -824,8 +819,8 @@ class COTVisualizer:
                         title="Div<br>%ile",
                         x=0.92,
                         thickness=15,
-                        len=0.14,
-                        y=0.53,
+                        len=0.24,
+                        y=0.47,
                     ),
                 ),
                 text=latest["market"],
@@ -874,36 +869,6 @@ class COTVisualizer:
             line=dict(color="gray", dash="dash"),
         )
 
-        key_colors = [key_table["signal_color"].tolist()] * 3
-        fig.add_trace(
-            go.Table(
-                columnwidth=[2.3, 1.4, 0.8],
-                header=dict(
-                    values=[
-                        "Market",
-                        "Signal",
-                        "Div %ile",
-                    ],
-                    fill_color="#e5e7eb",
-                    align="left",
-                    font=dict(size=12),
-                ),
-                cells=dict(
-                    values=[
-                        key_table["chart_link"],
-                        key_table["signal_label"],
-                        key_table["divergence_percentile"].apply(lambda x: f"{x:.0f}"),
-                    ],
-                    fill_color=key_colors,
-                    align="left",
-                    height=24,
-                    font=dict(size=11),
-                ),
-            ),
-            row=3,
-            col=1,
-        )
-
         bar_colors = np.where(extremes["intent_score"] >= 0, "#1e8449", "#c0392b")
         fig.add_trace(
             go.Bar(
@@ -928,7 +893,7 @@ class COTVisualizer:
                     "4w Change: %{customdata[2]:+.0f}<extra></extra>"
                 ),
             ),
-            row=4,
+            row=3,
             col=1,
         )
         fig.add_shape(
@@ -1044,7 +1009,7 @@ class COTVisualizer:
             col=1,
         )
         fig.update_yaxes(title_text="Small Spec Net %", row=2, col=1)
-        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=4, col=1)
+        fig.update_xaxes(title_text="Intent Score: Bearish < 0 < Bullish", row=3, col=1)
         fig.update_yaxes(
             automargin=True,
             categoryorder="array",
@@ -1052,7 +1017,7 @@ class COTVisualizer:
             tickmode="array",
             tickvals=extremes_markets,
             ticktext=extremes_markets,
-            row=4,
+            row=3,
             col=1,
         )
 

@@ -66,6 +66,9 @@ class DashboardLinkTests(unittest.TestCase):
             path = config.charts_dir / 'dashboard.html'
             fig = COTVisualizer(config).create_dashboard(df, signals, save_path=path)
             tables = [trace for trace in fig.data if trace.type == 'table']
+            self.assertEqual(len(tables), 1)
+            self.assertEqual([annotation.text for annotation in fig.layout.annotations],
+                             ['Category Drill Down', 'Positioning Map', 'Bullish and Bearish Extremes'])
             full_table = next(trace for trace in tables if 'Category' in trace.header.values)
             self.assertGreater(full_table.domain.y[0], .6)
             self.assertEqual(len(full_table.cells.values[0]), len(markets))

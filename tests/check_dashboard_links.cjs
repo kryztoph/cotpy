@@ -34,6 +34,10 @@ const { pathToFileURL } = require('node:url');
         await openDashboard();
         await page.evaluate(() => {
             const graph = document.querySelector('.js-plotly-plot');
+            if (graph.data.filter(trace => trace.type === 'table').length !== 1 ||
+                    graph.layout.annotations.some(annotation => annotation.text === 'Key Markets')) {
+                throw new Error('Dashboard should have one full market table and no duplicate Key Markets section');
+            }
             const full = graph.data.find(trace => trace.type === 'table' && trace.header.values.includes('Category'));
             if (!full || full.domain.y[0] < .6 || graph.layout.height !== 3000) {
                 throw new Error('Full market table must remain at the top of the original dashboard layout');
