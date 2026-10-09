@@ -147,12 +147,26 @@ The scheduled job runs:
 scripts/run_cotpy_weekly.sh
 ```
 
-The runner uses `main.py --update --force`, verifies the current-year COT files
-were actually refreshed, then regenerates analysis, signals, CSV exports, the
+The runner uses `main.py --update`, which refreshes current-week reports and
+the current-year archives while reusing historical archives. Failed current-week
+downloads return failure instead of silently continuing with cached data.
+The runner verifies that both current-week files were refreshed and contain
+report dates no older than 10 days, then regenerates analysis, signals, CSV exports, the
 dashboard, all static and interactive enabled-market charts, the trade setup report,
 and position summary. By default it then
 publishes the refreshed reports to the `kryztoph/csfox-reports` GitHub Pages
 repo under `cotpy/`. Logs are written to `logs/weekly.log`.
+
+The 10-day freshness limit is an operational guard against publishing last
+week's data, rather than an official release-calendar calculation. For a known
+CFTC release delay, set `COTPY_MAX_REPORT_AGE_DAYS` to a larger positive number.
+Freshness uses weekly report dates, so a late-December report remains valid in
+early January even before the new annual archive is available.
+
+On macOS the wrapper holds a `caffeinate -i` assertion while the job runs.
+This prevents idle sleep from stretching downloads, timeouts, and publishing
+retries across days. It does not wake a sleeping Mac or prevent lid-close sleep;
+the scheduled job still needs the computer available to run.
 
 Publish reports manually:
 

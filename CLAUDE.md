@@ -171,6 +171,8 @@ Publishing:
 - The installed schedule runs Saturday at 7 a.m. and noon. It invokes the shell wrapper directly, so changes to the runner take effect without reloading launchd.
 - Download, report generation, and publishing each get three attempts, with 60-second and 300-second retry delays. Publishing retries do not repeat the completed generation stage within a run.
 - Download attempts allow 40 minutes; each generation command and each publishing attempt allow 60 minutes. Timed-out commands and their child processes are terminated before retrying.
+- On macOS the weekly wrapper uses `caffeinate -i` for the job lifetime to prevent idle sleep from stretching those timeouts. It does not wake a sleeping computer or prevent lid-close sleep.
+- Weekly downloads refresh current-year archives and current-week endpoints, reuse historical archives, and fail if either current-week endpoint fails. Validation checks current-week file mtimes and report dates (maximum age 10 days; override `COTPY_MAX_REPORT_AGE_DAYS` for a known release delay), including reports crossing New Year.
 - `logs/weekly-status.json` records the latest stage, attempt, and error; `logs/weekly.log` contains the complete run output. `logs/weekly.lock` uses an OS lock released automatically when the runner exits or crashes.
 - Every GitHub API call has a 120-second timeout and up to five attempts for transient errors. Unchanged files are identified by Git blob hashes and skipped.
 - Publishing requires a successful Pages build for the target commit and matching live dashboard bytes, allowing 15 minutes for deployment. A no-change rerun still checks/repairs deployment. `COTPY_PUBLISH_TRIGGER_PAGES=0` explicitly disables deployment verification.

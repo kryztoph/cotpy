@@ -2,6 +2,7 @@
 
 import io
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -29,7 +30,7 @@ class COTFetcher:
         """
         output_file = self.config.data_dir / f"legacy_{year}.txt"
 
-        if output_file.exists() and not force:
+        if output_file.exists() and not force and year < datetime.now().year:
             print(f"Legacy {year} data already exists, skipping download")
             return output_file
 
@@ -72,7 +73,7 @@ class COTFetcher:
         """
         output_file = self.config.data_dir / f"disaggregated_{year}.txt"
 
-        if output_file.exists() and not force:
+        if output_file.exists() and not force and year < datetime.now().year:
             print(f"Disaggregated {year} data already exists, skipping download")
             return output_file
 
@@ -106,10 +107,6 @@ class COTFetcher:
         """Download current-week Legacy futures COT report."""
         output_file = self.config.data_dir / "legacy_current.txt"
 
-        if output_file.exists() and not force:
-            print("Current Legacy data already exists, skipping download")
-            return output_file
-
         url = self.config.get_current_legacy_url()
         print("Downloading current Legacy COT data...")
         content = self._download_current_text(url)
@@ -122,10 +119,6 @@ class COTFetcher:
     def fetch_current_disaggregated_data(self, force: bool = False) -> Path:
         """Download current-week Disaggregated futures COT report."""
         output_file = self.config.data_dir / "disaggregated_current.txt"
-
-        if output_file.exists() and not force:
-            print("Current Disaggregated data already exists, skipping download")
-            return output_file
 
         url = self.config.get_current_disaggregated_url()
         print("Downloading current Disaggregated COT data...")
@@ -163,17 +156,21 @@ class COTFetcher:
             except Exception as e:
                 print(f"Warning: Could not fetch Disaggregated {year}: {e}")
 
+        current_errors = []
         try:
             legacy_files.append(self.fetch_current_legacy_data(force=force))
         except Exception as e:
-            print(f"Warning: Could not fetch current Legacy data: {e}")
+            current_errors.append(f"Legacy: {e}")
 
         try:
             disaggregated_files.append(
                 self.fetch_current_disaggregated_data(force=force)
             )
         except Exception as e:
-            print(f"Warning: Could not fetch current Disaggregated data: {e}")
+            current_errors.append(f"Disaggregated: {e}")
+
+        if current_errors:
+            raise RuntimeError("Could not refresh current COT reports: " + "; ".join(current_errors))
 
         return {"legacy": legacy_files, "disaggregated": disaggregated_files}
 

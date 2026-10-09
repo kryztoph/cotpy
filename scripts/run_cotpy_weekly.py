@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import fcntl
+import csv
 import json
 import os
 import signal
 import subprocess
 import sys
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 PROJECT = Path(os.environ.get("COTPY_PROJECT_DIR", "/Users/fox/Private/Projects/cotpy"))
@@ -41,11 +42,30 @@ def run_command(command: list[str], timeout: int) -> None:
 
 
 def check_downloads(started: float) -> None:
-    # The CLI logs download errors without returning failure.
+    # Annual archives can lag the weekly endpoint, particularly at New Year.
+    # Require the files used to supply the latest week, not just new mtimes.
+    max_age = int(os.environ.get("COTPY_MAX_REPORT_AGE_DAYS", "10"))
+    if max_age < 1:
+        raise RuntimeError("COTPY_MAX_REPORT_AGE_DAYS must be positive")
     for kind in ("legacy", "disaggregated"):
-        path = PROJECT / f"data/{kind}_{datetime.now().year}.txt"
+        path = PROJECT / f"data/{kind}_current.txt"
         if not path.is_file() or not path.stat().st_size or path.stat().st_mtime < started:
-            raise RuntimeError(f"Current-year download was not refreshed: {path}")
+            raise RuntimeError(f"Current-week download was not refreshed: {path}")
+        try:
+            with path.open(newline="", encoding="utf-8") as handle:
+                rows = csv.DictReader(handle)
+                column = ("As of Date in Form YYYY-MM-DD" if kind == "legacy"
+                          else "Report_Date_as_YYYY-MM-DD")
+                dates = [date.fromisoformat(row[column].strip()) for row in rows]
+            if not dates:
+                raise ValueError("no report rows")
+            latest = max(dates)
+        except (KeyError, TypeError, ValueError, csv.Error) as exc:
+            raise RuntimeError(f"Invalid COT report {path}: {exc}") from exc
+        age = (datetime.now().date() - latest).days
+        if age < 0 or age > max_age:
+            raise RuntimeError(f"Stale COT report {path}: latest {latest}, age {age} days (maximum {max_age})")
+        print(f"Validated {kind} report date: {latest}", flush=True)
 
 
 def run_stage(name: str, commands: list[list[str]], timeout: int) -> None:
@@ -81,7 +101,7 @@ def main() -> int:
             raise RuntimeError("Legacy weekly lock exists; check for an older running job")
         python = sys.executable
         record("weekly", "running")
-        run_stage("download", [[python, "main.py", "--update", "--force"]], 2400)
+        run_stage("download", [[python, "main.py", "--update"]], 2400)
         run_stage("reports", [
             [python, "main.py", "--analyze", "--signals", "--export", "--market-charts"],
             [python, "report.py"], [python, "summary_report.py"],

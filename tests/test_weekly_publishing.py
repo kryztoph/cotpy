@@ -1,9 +1,13 @@
 import importlib.util
+import io
 import json
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from datetime import datetime
+import zipfile
 from unittest.mock import Mock, patch
 
 
@@ -83,6 +87,41 @@ class PublishingTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def write_current_reports(self, directory, report_date):
+        data = Path(directory) / "data"
+        data.mkdir()
+        for kind in ("legacy", "disaggregated"):
+            column = ("As of Date in Form YYYY-MM-DD" if kind == "legacy"
+                      else "Report_Date_as_YYYY-MM-DD")
+            (data / f"{kind}_current.txt").write_text(
+                f'Market_and_Exchange_Names,{column}\nGOLD,{report_date}\n'
+            )
+
+    def test_freshly_downloaded_stale_report_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)), patch.object(runner, "datetime") as clock:
+            clock.now.return_value = datetime(2026, 10, 3)
+            self.write_current_reports(directory, "2026-09-22")
+            with self.assertRaisesRegex(RuntimeError, "Stale COT report"):
+                runner.check_downloads(0)
+
+    def test_new_year_accepts_previous_year_weekly_report_without_new_archive(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)), patch.object(runner, "datetime") as clock:
+            clock.now.return_value = datetime(2027, 1, 2)
+            self.write_current_reports(directory, "2026-12-29")
+            runner.check_downloads(0)
+
+    def test_release_delay_override(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)), patch.object(runner, "datetime") as clock, patch.dict(os.environ, {"COTPY_MAX_REPORT_AGE_DAYS": "14"}):
+            clock.now.return_value = datetime(2026, 10, 3)
+            self.write_current_reports(directory, "2026-09-22")
+            runner.check_downloads(0)
+
+    def test_failed_current_week_download_cannot_use_cached_week(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)):
+            self.write_current_reports(directory, "2026-09-29")
+            with self.assertRaisesRegex(RuntimeError, "not refreshed"):
+                runner.check_downloads(10**12)
+
     def test_concurrent_runner_skips_work(self):
         import fcntl
         with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)), patch.object(runner, "run_stage") as stage:
@@ -124,6 +163,37 @@ class RunnerTests(unittest.TestCase):
             with self.assertRaises(subprocess.TimeoutExpired):
                 runner.run_command(["test"], 1)
             kill.assert_called_once_with(123, runner.signal.SIGKILL)
+
+
+class FetchingTests(unittest.TestCase):
+    def test_update_reuses_history_but_refreshes_mutable_archives_and_week(self):
+        from src.fetcher import COTFetcher
+        archive = io.BytesIO()
+        with zipfile.ZipFile(archive, "w") as bundle:
+            bundle.writestr("report.txt", "header\nnew annual data")
+        with tempfile.TemporaryDirectory() as directory:
+            config = Mock(data_dir=Path(directory))
+            fetcher = COTFetcher(config)
+            year = datetime.now().year
+            for kind in ("legacy", "disaggregated"):
+                for suffix in (str(year - 1), str(year), "current"):
+                    (config.data_dir / f"{kind}_{suffix}.txt").write_text("header\nold data")
+            with patch("src.fetcher.requests.get", return_value=Mock(content=archive.getvalue())) as get, patch.object(fetcher, "_download_current_text", return_value="fresh week") as current:
+                for method in (fetcher.fetch_legacy_data, fetcher.fetch_disaggregated_data):
+                    self.assertIn("old data", method(year - 1).read_text())
+                    self.assertIn("new annual data", method(year).read_text())
+                self.assertIn("fresh week", fetcher.fetch_current_legacy_data().read_text())
+                self.assertIn("fresh week", fetcher.fetch_current_disaggregated_data().read_text())
+                self.assertEqual(get.call_count, 2)
+                self.assertEqual(current.call_count, 2)
+
+    def test_current_download_failure_propagates(self):
+        from src.fetcher import COTFetcher
+        fetcher = COTFetcher(Mock())
+        fetcher.config.get_years_to_fetch.return_value = []
+        with patch.object(fetcher, "fetch_current_legacy_data", side_effect=RuntimeError("offline")), patch.object(fetcher, "fetch_current_disaggregated_data", return_value=Path("fresh")):
+            with self.assertRaisesRegex(RuntimeError, "Could not refresh current COT reports: Legacy: offline"):
+                fetcher.fetch_all_data()
 
 
 if __name__ == "__main__":
