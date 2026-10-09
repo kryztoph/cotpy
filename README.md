@@ -34,7 +34,7 @@ python report.py
 | `--chart MARKET, -c` | Generate charts for a specific market |
 | `--interactive, -i` | Generate interactive Plotly chart (with --chart) |
 | `--export, -e` | Export analysis results to CSV |
-| `--dashboard, -d` | Generate interactive dashboard |
+| `--dashboard, -d` | Generate interactive dashboard and all linked market charts |
 | `--key-charts` | Generate static and interactive charts for all key markets |
 | `--market-charts` | Generate static and interactive charts for all enabled markets |
 | `--list-markets, -l` | List all available markets |
@@ -134,7 +134,7 @@ Report saved to `output/trade_setup_report.txt`
 ## Weekly Automation
 
 This repo includes a macOS LaunchAgent that refreshes CFTC data and regenerates
-all outputs every Saturday at 7:00 AM local time:
+all outputs every Saturday at 7:00 AM and noon local time:
 
 ```bash
 cp launchd/com.fox.cotpy.weekly.plist ~/Library/LaunchAgents/
@@ -167,6 +167,30 @@ On macOS the wrapper holds a `caffeinate -i` assertion while the job runs.
 This prevents idle sleep from stretching downloads, timeouts, and publishing
 retries across days. It does not wake a sleeping Mac or prevent lid-close sleep;
 the scheduled job still needs the computer available to run.
+
+Download, report generation, and publishing each receive three attempts with
+60-second and 300-second delays. Download commands have a 40-minute timeout;
+each generation command and publish attempt have a 60-minute timeout. The runner
+kills timed-out process groups before retrying. Publishing retries reuse completed
+reports. An OS lock prevents overlapping runs and releases automatically after a
+crash. The latest stage, attempt, and error are recorded in `logs/weekly-status.json`.
+
+GitHub API calls have a 120-second timeout and up to five attempts for transient
+failures. Unchanged report blobs are skipped. Publishing succeeds only after a
+Pages build for the target commit and matching live dashboard bytes are verified;
+unchanged reruns also check deployment. Chart generation fails if any required
+artifact is missing, so partial results cannot be published by the weekly runner.
+
+If replacing an already loaded LaunchAgent, reload it to install the fallback:
+
+```bash
+launchctl bootout "gui/$(id -u)/com.fox.cotpy.weekly"
+cp launchd/com.fox.cotpy.weekly.plist ~/Library/LaunchAgents/
+launchctl bootstrap "gui/$(id -u)" ~/Library/LaunchAgents/com.fox.cotpy.weekly.plist
+```
+
+See [the weekly failure investigation](docs/weekly-refresh-investigation.md) for
+observed failures and recovery limits.
 
 Publish reports manually:
 
@@ -304,3 +328,13 @@ cotpy/
 ├── summary_report.py  # Position summary report generator
 └── requirements.txt
 ```
+
+Dashboard navigation checks:
+
+```bash
+python -m unittest discover -s tests -v
+NODE_PATH=/tmp/cotpy-links-browser/node_modules node tests/check_dashboard_links.cjs
+```
+
+Browser checks require Playwright and Chromium; set `CHROMIUM_PATH` to use an existing browser.
+The all-markets table stays at the top, with the existing sorting controls and branded layout.

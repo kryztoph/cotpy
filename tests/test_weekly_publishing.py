@@ -23,6 +23,11 @@ runner = load_script("run_cotpy_weekly")
 
 
 class PublishingTests(unittest.TestCase):
+    def test_dry_run_never_calls_github(self):
+        with patch.object(publisher.os, "chdir"), patch.object(publisher, "DRY_RUN", True), patch.object(publisher, "_publish_files", return_value=[]), patch.object(publisher, "_index_html", return_value={}), patch.object(publisher, "_gh_json") as api:
+            self.assertEqual(publisher.main(), 0)
+            api.assert_not_called()
+
     def test_transient_failures_and_timeout_recover(self):
         failures = [
             subprocess.TimeoutExpired("gh", 120),
@@ -87,6 +92,41 @@ class PublishingTests(unittest.TestCase):
 
 
 class RunnerTests(unittest.TestCase):
+    def test_real_timeout_reaps_process(self):
+        import sys
+        real_popen = subprocess.Popen
+        processes = []
+        def start(*args, **kwargs):
+            process = real_popen(*args, **kwargs)
+            processes.append(process)
+            return process
+        with patch.object(runner.subprocess, "Popen", side_effect=start):
+            with self.assertRaises(subprocess.TimeoutExpired):
+                runner.run_command([sys.executable, "-c", "import time; time.sleep(30)"], 0.1)
+        self.assertEqual(len(processes), 1)
+        self.assertEqual(processes[0].returncode, -runner.signal.SIGKILL)
+
+    def test_failed_download_prevents_reports_and_publish(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)), patch.object(runner, "record"), patch.object(runner, "run_command", side_effect=RuntimeError("offline")) as run, patch.object(runner.time, "sleep"):
+            with self.assertRaisesRegex(RuntimeError, "offline"):
+                runner.main()
+            self.assertEqual(run.call_count, 3)
+            for call in run.call_args_list:
+                self.assertEqual(call.args[0][-2:], ["main.py", "--update"])
+
+    def test_malformed_empty_and_future_reports_are_rejected(self):
+        for report_date, message in [("invalid", "Invalid COT report"), ("2026-10-05", "Stale COT report")]:
+            with self.subTest(report_date=report_date), tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)), patch.object(runner, "datetime") as clock:
+                clock.now.return_value = datetime(2026, 10, 3)
+                self.write_current_reports(directory, report_date)
+                with self.assertRaisesRegex(RuntimeError, message):
+                    runner.check_downloads(0)
+        with tempfile.TemporaryDirectory() as directory, patch.object(runner, "PROJECT", Path(directory)):
+            self.write_current_reports(directory, "2026-09-29")
+            (Path(directory) / "data/legacy_current.txt").write_text("Market,As of Date in Form YYYY-MM-DD\n")
+            with self.assertRaisesRegex(RuntimeError, "no report rows"):
+                runner.check_downloads(0)
+
     def write_current_reports(self, directory, report_date):
         data = Path(directory) / "data"
         data.mkdir()

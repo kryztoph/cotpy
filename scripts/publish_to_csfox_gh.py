@@ -43,8 +43,6 @@ DASHBOARD = Path("output/charts/dashboard.html")
 def main() -> int:
     os.chdir(PROJECT_DIR)
     repo = _repo_name()
-    user = _gh_json("user")
-    print(f"authenticated GitHub user: {user.get('login', '<unknown>')}")
     files = _publish_files()
     generated = _index_html(files)
     generated["index.html"] = _site_index()
@@ -57,6 +55,8 @@ def main() -> int:
             print(f"  <generated> -> {target}")
         return 0
 
+    user = _gh_json("user")
+    print(f"authenticated GitHub user: {user.get('login', '<unknown>')}")
     ref = _gh_json(f"repos/{repo}/git/ref/heads/{BRANCH}")
     base_commit = cast(dict[str, Any], ref["object"])["sha"]
     commit_data = _gh_json(f"repos/{repo}/git/commits/{base_commit}")

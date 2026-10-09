@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional
 from html import escape
+from urllib.parse import quote
 import base64
 import json
 
@@ -55,6 +56,7 @@ class COTVisualizer:
         global_tracker: bool = False,
         point_links: bool = False,
         dashboard_sort_payload: Optional[dict] = None,
+        table_links: bool = False,
     ) -> None:
         """Write a self-contained Plotly page with CSFox branding."""
         logo_path = Path("/Users/fox/Private/Projects/csfox/assets/logo.png")
@@ -66,7 +68,8 @@ class COTVisualizer:
                 f'src="data:image/png;base64,{encoded}" alt="CSFox">'
             )
 
-        html = fig.to_html(full_html=True, config={"responsive": True})
+        link_script = Path(__file__).with_name("dashboard_links.js").read_text() if table_links else None
+        html = fig.to_html(full_html=True, config={"responsive": True}, post_script=link_script)
         branding = f"""
 <style>
   html, body {{ margin: 0; max-width: 100%; overflow-x: hidden; font-family: Arial, sans-serif; }}
@@ -738,11 +741,13 @@ class COTVisualizer:
         latest["intent_score"] = latest["divergence_percentile"] - 50
         latest["chart_link"] = latest["market"].apply(
             lambda market: (
-                f'<a href="{escape(self._interactive_chart_filename(market))}" target="_self">'
+                f'<a href="{escape(quote(self._interactive_chart_filename(market), safe=""))}" target="_self">'
                 f'{escape(market)}</a>'
             )
         )
-        latest["chart_url"] = latest["market"].apply(self._interactive_chart_filename)
+        latest["chart_url"] = latest["market"].apply(
+            lambda market: quote(self._interactive_chart_filename(market), safe="")
+        )
 
         return latest
 
@@ -1057,6 +1062,7 @@ class COTVisualizer:
                 save_path,
                 point_links=True,
                 dashboard_sort_payload=dashboard_sort_payload,
+                table_links=True,
             )
             print(f"Saved dashboard to {save_path}")
 
